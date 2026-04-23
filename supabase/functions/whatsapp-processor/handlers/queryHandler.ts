@@ -58,7 +58,7 @@ export async function handleQuery(
       phone,
       `We found ${products.length} products matching "${productName}"`,
       products.map((p) => ({
-        id:           p.id,
+        id:           `SELECT_PRODUCT_${p.id}`,   // prefixed so processor can route it
         name:         p.name,
         price:        p.selling_price,
         stock_status: p.stock_status,

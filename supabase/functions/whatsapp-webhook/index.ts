@@ -3,8 +3,8 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VERIFY_TOKEN = Deno.env.get("WHATSAPP_VERIFY_TOKEN")!;
-const SUPABASE_URL = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-const SERVICE_KEY  = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 interface MetaMessageEntry {
@@ -15,6 +15,7 @@ interface MetaMessageEntry {
   interactive?: {
     type: string;
     button_reply?: { id: string; title: string };
+    list_reply?:   { id: string; title: string; description?: string };
   };
 }
 
@@ -43,7 +44,12 @@ function extractMessage(payload: Record<string, unknown>): {
 
     const msg   = messages[0];
     const body  = msg.text?.body ?? null;
-    const btnId = msg.interactive?.button_reply?.id ?? null;
+    // button_reply  = interactive reply button (type: "button")
+    // list_reply    = interactive list message selection (type: "list")
+    const btnId =
+      msg.interactive?.button_reply?.id ??
+      msg.interactive?.list_reply?.id ??
+      null;
 
     return {
       messageId:     msg.id,

@@ -85,9 +85,9 @@ export async function sendProductList(
 ): Promise<void> {
   // WhatsApp List Messages have a max of 10 rows per section
   const rows = products.slice(0, 10).map((p) => ({
-    id:          p.id,
+    id:          p.id,    // already prefixed with SELECT_PRODUCT_ by the caller
     title:       p.name.slice(0, 24),  // WhatsApp row title: 24 char max
-    description: `Rs. ${p.price} — ${p.stock_status === "in-stock" ? "✅ In Stock" : "⚠️ Low Stock"}`,
+    description: `Rs. ${p.price} — ${p.stock_status === "in_stock" ? "✅ In Stock" : "⚠️ Low Stock"}`,
   }));
 
   await postToMeta({

@@ -1,14 +1,17 @@
 -- =====================================================
--- ATOMIC ORDER CREATION (Fixes ghost-order bug)
+-- FIX: order_items.product_sku column type + function
 -- =====================================================
--- Replaces the two separate inserts in the create-order Edge Function
--- with a single atomic transaction. If order_items insertion fails,
--- the whole transaction rolls back and no orphaned order is left behind.
+-- Run this entire block in Supabase SQL Editor at once.
 -- =====================================================
 
+-- Step 1: Fix the column type (safe even if already TEXT)
+ALTER TABLE public.order_items
+ALTER COLUMN product_sku TYPE TEXT USING product_sku::TEXT;
+
+-- Step 2: Recreate the function (includes ::order_status cast fix too)
 CREATE OR REPLACE FUNCTION public.create_order_atomic(
-  p_order    JSONB,
-  p_items    JSONB
+  p_order JSONB,
+  p_items JSONB
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -18,10 +21,8 @@ AS $$
 DECLARE
   v_order      public.orders%ROWTYPE;
   v_order_item JSONB;
-  v_items_arr  JSONB[];
   v_result     JSONB;
 BEGIN
-  -- Insert the order row
   INSERT INTO public.orders (
     reseller_id,
     shipping_name,
@@ -46,7 +47,6 @@ BEGIN
   )
   RETURNING * INTO v_order;
 
-  -- Insert all order items, linking them to the new order ID
   FOR v_order_item IN SELECT * FROM jsonb_array_elements(p_items)
   LOOP
     INSERT INTO public.order_items (
@@ -62,22 +62,19 @@ BEGIN
       v_order.id,
       (v_order_item->>'product_id')::UUID,
       v_order_item->>'product_name',
-      v_order_item->>'product_sku',
+      v_order_item->>'product_sku',          -- TEXT column now
       (v_order_item->>'quantity')::INTEGER,
       (v_order_item->>'unit_price')::NUMERIC,
       (v_order_item->>'total_price')::NUMERIC
     );
   END LOOP;
 
-  -- Return the created order as JSON for the caller
   SELECT row_to_json(v_order)::JSONB INTO v_result;
   RETURN v_result;
 
 EXCEPTION WHEN OTHERS THEN
-  -- Any error in this block causes a full rollback of both inserts.
   RAISE EXCEPTION 'Order creation failed: %', SQLERRM;
 END;
 $$;
 
--- Grant execute permission for service role (used by Edge Functions)
 GRANT EXECUTE ON FUNCTION public.create_order_atomic(JSONB, JSONB) TO service_role;

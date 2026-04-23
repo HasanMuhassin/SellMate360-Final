@@ -3,8 +3,8 @@ import { IntentResult } from "../ai/gemini.ts";
 import { ConversationState, updateState, resetState, isDraftExpired } from "../state/conversation.ts";
 import { sendText, sendButtonMessage } from "../services/whatsapp.ts";
 
-const SUPABASE_URL = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-const SERVICE_KEY  = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -46,7 +46,7 @@ async function sendOrderConfirmation(
     return;
   }
 
-  if (product.stock_status === "out-of-stock" || product.stock <= 0) {
+  if (product.stock_status === "out_of_stock" || product.stock <= 0) {
     await sendText(
       phone,
       `Sorry, *${product.name}* just went out of stock. 😔 Would you like to look for something else?`
@@ -86,8 +86,8 @@ async function sendOrderConfirmation(
     phone,
     summary,
     [
-      { id: `CONFIRM_ORDER_${phone}`,  title: "✅ Confirm Order" },
-      { id: "CANCEL_ORDER",           title: "❌ Cancel" },
+      { id: "CONFIRM_ORDER", title: "✅ Confirm Order" },
+      { id: "CANCEL_ORDER",  title: "❌ Cancel" },
     ],
     "SellMate Order",
     "Prices are inclusive of delivery charges"
@@ -116,18 +116,21 @@ export async function handleOrderDraft(
 
   // Resolve product from AI-extracted name (only if product not already locked)
   if (intent.productName && !state.draft_product_id) {
+    // Strip any surrounding quotes the AI may have included (e.g. `"Digital Air Fryer 5L"`)
+    const cleanName = intent.productName.replace(/^["'""]+|["'""]+$/g, "").trim();
+
     const { data: products } = await db
       .from("products")
       .select("id, name, sku, selling_price, stock_status, stock")
-      .ilike("name", `%${intent.productName}%`)
+      .ilike("name", `%${cleanName}%`)
       .neq("status", "inactive")
-      .neq("stock_status", "out-of-stock")
+      .neq("stock_status", "out_of_stock")   // DB uses underscore, not hyphen
       .limit(3);
 
     if (!products || products.length === 0) {
       await sendText(
         phone,
-        `Sorry, we couldn't find "${intent.productName}" in our catalogue. Could you try a different product name?`
+        `Sorry, we couldn't find "${cleanName}" in our catalogue. Could you try a different product name?`
       );
       return;
     }
@@ -143,7 +146,7 @@ export async function handleOrderDraft(
       // Multiple matches — ask customer to pick
       await sendButtonMessage(
         phone,
-        `We found ${products.length} products matching "${intent.productName}".\n\nWhich one did you mean?`,
+        `We found ${products.length} products matching "${cleanName}".\n\nWhich one did you mean?`,
         products.slice(0, 3).map((p) => ({
           id:    `SELECT_PRODUCT_${p.id}`,
           title: p.name.slice(0, 20),
@@ -301,6 +304,8 @@ export async function executeOrder(
       shipping_street:   loc.street,
       total:             state.draft_total ?? state.draft_unit_price ?? 0,
       order_status:      "pending",
+      payment_method:    state.draft_payment_method ?? "cod",
+      channel:           "whatsapp",
     },
     items: [
       {
@@ -343,14 +348,16 @@ export async function executeOrder(
   }
 
   // ── Audit log ─────────────────────────────────────────────────────────────
-  await db.from("audit_logs").insert({
-    action:    "whatsapp_order_created",
-    resource:  "orders",
-    details:   { order_number: orderNumber, phone, product: state.draft_product_name },
-    level:     "info",
-    user_name: customerName,
-    user_role: "customer",
-  }).catch(() => {}); // Audit log failure must never block the order success message
+  try {
+    await db.from("audit_logs").insert({
+      action:    "whatsapp_order_created",
+      resource:  "orders",
+      details:   { order_number: orderNumber, phone, product: state.draft_product_name },
+      level:     "info",
+      user_name: customerName,
+      user_role: "customer",
+    });
+  } catch (auditErr) { /* Audit log failure must never block the order success message */ }
 
   // Reset state for next conversation
   await resetState(db, phone);

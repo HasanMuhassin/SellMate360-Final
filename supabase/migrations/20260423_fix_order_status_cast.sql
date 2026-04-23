@@ -1,9 +1,11 @@
 -- =====================================================
--- ATOMIC ORDER CREATION (Fixes ghost-order bug)
+-- FIX: cast order_status text → enum in create_order_atomic
 -- =====================================================
--- Replaces the two separate inserts in the create-order Edge Function
--- with a single atomic transaction. If order_items insertion fails,
--- the whole transaction rolls back and no orphaned order is left behind.
+-- Error: column "order_status" is of type order_status but
+--        expression is of type text
+-- Root cause: p_order->>'order_status' returns text; Postgres
+--             cannot implicitly coerce text to a custom enum.
+-- Fix: explicit ::order_status cast on line 45 of original function.
 -- =====================================================
 
 CREATE OR REPLACE FUNCTION public.create_order_atomic(
@@ -18,7 +20,7 @@ AS $$
 DECLARE
   v_order      public.orders%ROWTYPE;
   v_order_item JSONB;
-  v_items_arr  JSONB[];
+  v_items_arr  JSONB[];</pre>
   v_result     JSONB;
 BEGIN
   -- Insert the order row
@@ -42,7 +44,7 @@ BEGIN
     p_order->>'shipping_city',
     p_order->>'shipping_street',
     (p_order->>'total')::NUMERIC,
-    COALESCE(p_order->>'order_status', 'pending')::order_status
+    COALESCE(p_order->>'order_status', 'pending')::order_status  -- ← FIXED: explicit cast
   )
   RETURNING * INTO v_order;
 

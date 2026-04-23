@@ -14,8 +14,8 @@ import {
 import { sendText } from "./services/whatsapp.ts";
 
 // ── DB client (service role — full access, no RLS) ────────────────────────────
-const SUPABASE_URL = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-const SERVICE_KEY  = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 // ─── Main Processor ────────────────────────────────────────────────────────────
 serve(async (req: Request) => {
@@ -75,7 +75,7 @@ serve(async (req: Request) => {
     if (buttonPayload) {
 
       // Customer confirmed the order
-      if (buttonPayload.startsWith("CONFIRM_ORDER_")) {
+      if (buttonPayload === "CONFIRM_ORDER") {
         await executeOrder(db, phone, state);
         return new Response("ok", { status: 200 });
       }

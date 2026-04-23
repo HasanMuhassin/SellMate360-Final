@@ -15,16 +15,16 @@ const google = createGoogleGenerativeAI({
 
 // ─── Schema: Intent Detection Output ─────────────────────────────────────────
 export const IntentSchema = z.object({
-  intent:           z.enum(["QUERY", "ORDER", "CASUAL", "UNKNOWN"]),
-  isQuery:          z.boolean(),
+  intent: z.enum(["QUERY", "ORDER", "CASUAL", "UNKNOWN"]),
+  isQuery: z.boolean(),
   isOrderPlacement: z.boolean(),
   isOrderConfirmed: z.boolean(),
-  productName:      z.string().nullable(),
-  quantity:         z.number().nullable(),
-  location:         z.string().nullable(),
-  paymentMethod:    z.enum(["cod", "card", "online"]).nullable(),
-  confidence:       z.number().min(0).max(1),
-  missingFields:    z.array(z.string()),
+  productName: z.string().nullable(),
+  quantity: z.number().nullable(),
+  location: z.string().nullable(),
+  paymentMethod: z.enum(["cod", "card", "online"]).nullable(),
+  confidence: z.number().min(0).max(1),
+  missingFields: z.array(z.string()),
 });
 
 export type IntentResult = z.infer<typeof IntentSchema>;
@@ -54,26 +54,29 @@ export async function detectIntent(
 ): Promise<IntentResult> {
   try {
     const { object } = await generateObject({
-      model:  google("gemini-1.5-flash"),   // Fast model for low-latency classification
+      model: google("gemini-2.5-flash"),   // Fast model for low-latency classification
       schema: IntentSchema,
       system: INTENT_SYSTEM_PROMPT,
       prompt: `Conversation so far:\n${conversationHistory}\n\nLatest message: ${customerMessage}`,
     });
     return object;
   } catch (err) {
-    console.error("Intent detection error:", err);
+    // Log the full error so it appears clearly in Supabase Edge Function logs
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("Intent detection error:", message);
+    console.error("Full error:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
     // Safe fallback — routes to the graceful UNKNOWN handler
     return {
-      intent:           "UNKNOWN",
-      isQuery:          false,
+      intent: "UNKNOWN",
+      isQuery: false,
       isOrderPlacement: false,
       isOrderConfirmed: false,
-      productName:      null,
-      quantity:         null,
-      location:         null,
-      paymentMethod:    null,
-      confidence:       0,
-      missingFields:    [],
+      productName: null,
+      quantity: null,
+      location: null,
+      paymentMethod: null,
+      confidence: 0,
+      missingFields: [],
     };
   }
 }
@@ -90,7 +93,7 @@ export async function generateQueryResponse(
 ): Promise<string> {
   try {
     const { text } = await generateText({
-      model:  google("gemini-1.5-flash"),
+      model: google("gemini-2.5-flash"),
       system: `${QUERY_RESPONSE_SYSTEM_PROMPT}\n\nAvailable product data:\n${productDataJson}`,
       prompt: customerMessage,
     });
@@ -110,7 +113,7 @@ export async function generateFallbackResponse(
 ): Promise<string> {
   try {
     const { text } = await generateText({
-      model:  google("gemini-1.5-flash"),
+      model: google("gemini-2.5-flash"),
       system: FALLBACK_SYSTEM_PROMPT,
       prompt: customerMessage,
     });
