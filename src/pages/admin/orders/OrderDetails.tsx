@@ -52,12 +52,13 @@ import { useAdminOrder, useUpdateOrderStatus } from '@/hooks/useAdminOrders';
 import { useCreateAuditLog } from '@/hooks/useSecurity';
 import { cn } from '@/lib/utils';
 
-const formatCurrency = (amount: number) => {
+const formatCurrency = (amount: any) => {
+  const num = Number(amount) || 0;
   return new Intl.NumberFormat('en-LK', {
     style: 'currency',
     currency: 'LKR',
     minimumFractionDigits: 0,
-  }).format(amount);
+  }).format(num);
 };
 
 const orderStatuses = [
@@ -148,7 +149,12 @@ export default function OrderDetails() {
   };
 
   const currentStatusIndex = orderStatuses.findIndex(s => s.value === order.order_status);
-  const itemsTotal = order.items?.reduce((sum, item) => sum + item.total_price, 0) || 0;
+  const itemsTotal = order.items?.reduce((sum, item) => {
+    const price = Number(item.unit_price) || 0;
+    const quantity = Number(item.quantity) || 0;
+    const itemTotal = Number(item.total_price) || (price * quantity);
+    return sum + itemTotal;
+  }, 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -170,7 +176,7 @@ export default function OrderDetails() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={() => navigate(`/admin/orders/${order.id}/invoice`)}>
             <Printer className="h-4 w-4" />
             Print Invoice
           </Button>
@@ -281,7 +287,12 @@ export default function OrderDetails() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {order.items?.map((item) => (
+                {order.items?.map((item) => {
+                  const price = Number(item.unit_price) || 0;
+                  const quantity = Number(item.quantity) || 0;
+                  const itemTotal = Number(item.total_price) || (price * quantity);
+                  
+                  return (
                   <div
                     key={item.id}
                     className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
@@ -293,15 +304,15 @@ export default function OrderDetails() {
                       <div>
                         <p className="font-medium">{item.product_name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {formatCurrency(item.unit_price)} × {item.quantity}
+                          {formatCurrency(price)} × {quantity}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">{formatCurrency(item.total_price)}</p>
+                      <p className="font-medium">{formatCurrency(itemTotal)}</p>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
 
               <Separator className="my-4" />

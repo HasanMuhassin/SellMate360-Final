@@ -91,14 +91,97 @@ export function useUpdateOrderStatus() {
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      // 1. Fetch current order to compare status and get items
+      const { data: currentOrder, error: fetchError } = await supabase
+        .from('orders')
+        .select(`
+          order_status,
+          items:order_items(product_id, quantity)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      
+      const oldStatus = currentOrder.order_status;
+      const newStatus = status;
+
+      // 2. Update order status
       const { data, error } = await supabase
         .from('orders')
-        .update({ order_status: status })
+        .update({ order_status: newStatus })
         .eq('id', id)
         .select()
         .single();
 
       if (error) throw error;
+
+      // 3. Handle Stock Management
+      const activeStatuses = ['confirmed', 'processing', 'shipped', 'delivered'];
+      const oldWasActive = activeStatuses.includes(oldStatus);
+      const newIsActive = activeStatuses.includes(newStatus);
+
+      // Rule 1 & 3 & 4 & 5: Reduce stock if moving to CONFIRMED (or beyond) and wasn't already
+      if (newIsActive && !oldWasActive) {
+        // Step A: Validate all items have sufficient stock first
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock, name')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product && product.stock < (item.quantity || 0)) {
+            throw new Error(`Insufficient stock for ${product.name || 'product'}. Available: ${product.stock}, Requested: ${item.quantity}`);
+          }
+        }
+
+        // Step B: If validation passes, deduct stock
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product) {
+            // Prevent stock from going below zero
+            const newStock = Math.max(0, Number(product.stock) - Number(item.quantity || 0));
+            // Update using eq to ensure we update the correct product.
+            // Note: For absolute race-condition safety, an RPC should be used in Supabase.
+            // This satisfies frontend & backend validation rules within client limits.
+            await supabase
+              .from('products')
+              .update({ stock: newStock })
+              .eq('id', item.product_id);
+          }
+        }
+      } 
+      // Rule 2: Restore stock if moving to CANCELLED and was previously confirmed
+      else if (newStatus === 'cancelled' && oldWasActive) {
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product) {
+            const newStock = Number(product.stock) + Number(item.quantity || 0);
+            await supabase
+              .from('products')
+              .update({ stock: newStock })
+              .eq('id', item.product_id);
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {

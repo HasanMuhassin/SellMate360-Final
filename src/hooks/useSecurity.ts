@@ -82,7 +82,16 @@ export interface SecurityStats {
 export function useAuditLogs() {
   return useQuery<AuditLogRow[]>({
     queryKey: ["audit-logs"],
-    queryFn: () => callSecurity("list_audit_logs"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      
+      if (error) throw error;
+      return data as AuditLogRow[];
+    },
   });
 }
 

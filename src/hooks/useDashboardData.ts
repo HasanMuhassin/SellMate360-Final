@@ -38,18 +38,23 @@ export function useDashboardStats() {
       const today = startOfDay(new Date()).toISOString();
       const monthStart = startOfMonth(new Date()).toISOString();
 
-      // Fetch orders and products in parallel
-      const [ordersRes, lowStockRes] = await Promise.all([
+      // Fetch orders, POS transactions, POS returns, and products in parallel
+      const [ordersRes, posRes, returnsRes, lowStockRes] = await Promise.all([
         supabase.from('orders').select('total, order_status, created_at'),
+        supabase.from('pos_transactions').select('total, status, created_at').eq('status', 'completed'),
+        supabase.from('pos_returns').select('refund_amount, status, created_at').eq('status', 'completed'),
         supabase.from('products').select('id', { count: 'exact', head: true }).lte('stock', 5).eq('status', 'active'),
       ]);
 
       if (ordersRes.error) throw ordersRes.error;
 
       const orders = ordersRes.data || [];
+      const posTransactions = posRes.data || [];
+      const posReturns = returnsRes.data || [];
+
       const stats: DashboardStats = {
         todaySales: 0,
-        totalOrders: orders.length,
+        totalOrders: orders.length + posTransactions.length,
         pendingOrders: 0,
         lowStockProducts: lowStockRes.count ?? 0,
         monthlyRevenue: 0,
@@ -60,6 +65,20 @@ export function useDashboardStats() {
         if (o.created_at >= today) stats.todaySales += Number(o.total);
         if (o.created_at >= monthStart) stats.monthlyRevenue += Number(o.total);
       }
+
+      for (const t of posTransactions) {
+        if (t.created_at >= today) stats.todaySales += Number(t.total);
+        if (t.created_at >= monthStart) stats.monthlyRevenue += Number(t.total);
+      }
+
+      for (const r of posReturns) {
+        if (r.created_at >= today) stats.todaySales -= Number(r.refund_amount);
+        if (r.created_at >= monthStart) stats.monthlyRevenue -= Number(r.refund_amount);
+      }
+
+      // Ensure sales don't go negative just in case
+      stats.todaySales = Math.max(0, stats.todaySales);
+      stats.monthlyRevenue = Math.max(0, stats.monthlyRevenue);
 
       return stats;
     },

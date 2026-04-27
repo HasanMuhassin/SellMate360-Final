@@ -14,6 +14,7 @@ import {
   Filter,
   Check,
   Tag,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,9 +55,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import StatCard from '@/components/admin/StatCard';
-import { mockAttributes } from '@/data/attributesMockData';
-import type { Attribute, AttributeOption } from '@/data/attributesMockData';
 import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { useAttributes, useCreateAttribute, useCreateAttributeOption, Attribute, AttributeOption } from '@/hooks/useAttributes';
 
 const attributeTypeIcons = {
   select: List,
@@ -75,15 +77,22 @@ const attributeTypeLabels = {
 export default function Attributes() {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [attributes, setAttributes] = useState<Attribute[]>(mockAttributes);
+  
+  // Real Database Connection
+  const { data: dbAttributes = [], isLoading } = useAttributes();
+  const createAttribute = useCreateAttribute();
+  const createOption = useCreateAttributeOption();
+  const queryClient = useQueryClient();
+
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [optionsDialogOpen, setOptionsDialogOpen] = useState(false);
-  const [selectedAttribute, setSelectedAttribute] = useState<Attribute | null>(null);
+  const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     slug: '',
-    type: 'select' as Attribute['type'],
+    type: 'select' as string,
     description: '',
     isRequired: false,
     isFilterable: true,
@@ -91,19 +100,20 @@ export default function Attributes() {
   });
   const [newOption, setNewOption] = useState({ value: '', label: '', colorHex: '' });
 
-  const filteredAttributes = attributes.filter((attr) => {
-    const matchesSearch =
-      attr.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      attr.slug.toLowerCase().includes(searchTerm.toLowerCase());
+  // Dynamically pull the active attribute to keep the options dialog fresh after mutations
+  const activeAttribute = dbAttributes.find(a => a.id === selectedAttributeId) || null;
+
+  const filteredAttributes = dbAttributes.filter((attr) => {
+    const matchesSearch = attr.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === 'all' || attr.type === typeFilter;
     return matchesSearch && matchesType;
   });
 
   const stats = {
-    totalAttributes: attributes.length,
-    totalOptions: attributes.reduce((acc, attr) => acc + attr.options.length, 0),
-    filterableCount: attributes.filter((attr) => attr.isFilterable).length,
-    colorAttributes: attributes.filter((attr) => attr.type === 'color').length,
+    totalAttributes: dbAttributes?.length || 0,
+    totalOptions: (dbAttributes || []).reduce((acc, attr) => acc + (attr?.attribute_options?.length || 0), 0),
+    filterableCount: dbAttributes?.length || 0, // Placeholder
+    colorAttributes: (dbAttributes || []).filter((attr) => attr?.type === 'color').length,
   };
 
   const generateSlug = (name: string) => {
@@ -122,7 +132,7 @@ export default function Attributes() {
   };
 
   const openCreateDialog = () => {
-    setSelectedAttribute(null);
+    setSelectedAttributeId(null);
     setFormData({
       name: '',
       slug: '',
@@ -136,132 +146,147 @@ export default function Attributes() {
   };
 
   const openEditDialog = (attribute: Attribute) => {
-    setSelectedAttribute(attribute);
+    setSelectedAttributeId(attribute.id);
     setFormData({
       name: attribute.name,
-      slug: attribute.slug,
+      slug: '',
       type: attribute.type,
-      description: attribute.description,
-      isRequired: attribute.isRequired,
-      isFilterable: attribute.isFilterable,
-      isVisible: attribute.isVisible,
+      description: '',
+      isRequired: false,
+      isFilterable: true,
+      isVisible: true,
     });
     setEditDialogOpen(true);
   };
 
   const openOptionsDialog = (attribute: Attribute) => {
-    setSelectedAttribute(attribute);
+    setSelectedAttributeId(attribute.id);
     setOptionsDialogOpen(true);
   };
 
-  const handleSaveAttribute = () => {
-    if (!formData.name.trim()) {
+  const handleSaveAttribute = async () => {
+    const normalizedName = formData.name.trim().toLowerCase();
+    
+    if (!normalizedName) {
       toast.error('Attribute name is required');
       return;
     }
 
-    if (selectedAttribute) {
-      setAttributes((prev) =>
-        prev.map((attr) =>
-          attr.id === selectedAttribute.id
-            ? {
-                ...attr,
-                ...formData,
-                updatedAt: new Date().toISOString(),
-              }
-            : attr
-        )
-      );
-      toast.success('Attribute updated successfully');
-    } else {
-      const newAttribute: Attribute = {
-        id: `attr-${Date.now()}`,
-        ...formData,
-        options: [],
-        productCount: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setAttributes((prev) => [...prev, newAttribute]);
-      toast.success('Attribute created successfully');
-    }
-    setEditDialogOpen(false);
-  };
+    // Client-side duplicate prevention (case-insensitive)
+    const isDuplicate = dbAttributes.some((attr) => 
+      attr.name.toLowerCase() === normalizedName && 
+      attr.id !== activeAttribute?.id
+    );
 
-  const handleDeleteAttribute = () => {
-    if (selectedAttribute) {
-      setAttributes((prev) => prev.filter((attr) => attr.id !== selectedAttribute.id));
-      toast.success('Attribute deleted successfully');
-    }
-    setDeleteDialogOpen(false);
-    setSelectedAttribute(null);
-  };
-
-  const handleAddOption = () => {
-    if (!newOption.value.trim() || !newOption.label.trim()) {
-      toast.error('Option value and label are required');
+    if (isDuplicate) {
+      toast.error(`An attribute named "${formData.name.trim()}" already exists.`);
       return;
     }
 
-    if (selectedAttribute) {
-      const option: AttributeOption = {
-        id: `opt-${Date.now()}`,
-        value: newOption.value.toLowerCase().replace(/\s+/g, '-'),
-        label: newOption.label,
-        colorHex: selectedAttribute.type === 'color' ? newOption.colorHex : undefined,
-        position: selectedAttribute.options.length + 1,
-      };
-
-      setAttributes((prev) =>
-        prev.map((attr) =>
-          attr.id === selectedAttribute.id
-            ? {
-                ...attr,
-                options: [...attr.options, option],
-                updatedAt: new Date().toISOString(),
-              }
-            : attr
-        )
-      );
-
-      setSelectedAttribute((prev) =>
-        prev ? { ...prev, options: [...prev.options, option] } : null
-      );
-
-      setNewOption({ value: '', label: '', colorHex: '' });
-      toast.success('Option added successfully');
+    try {
+      if (activeAttribute) {
+        // Update
+        const { error } = await supabase.from('attributes').update({ 
+          name: normalizedName, 
+          type: formData.type 
+        }).eq('id', activeAttribute.id);
+        
+        if (error) throw error;
+        toast.success('Attribute updated successfully');
+      } else {
+        // Create
+        await createAttribute.mutateAsync({ name: normalizedName, type: formData.type });
+        toast.success('Attribute created successfully');
+      }
+      queryClient.invalidateQueries({ queryKey: ["attributes"] });
+      setEditDialogOpen(false);
+    } catch (e: any) {
+      if (e.code === '23505') {
+        toast.error('Database Error: Attribute name already exists.');
+      } else {
+        toast.error(e.message || 'Failed to save attribute');
+      }
     }
   };
 
-  const handleRemoveOption = (optionId: string) => {
-    if (selectedAttribute) {
-      setAttributes((prev) =>
-        prev.map((attr) =>
-          attr.id === selectedAttribute.id
-            ? {
-                ...attr,
-                options: attr.options.filter((opt) => opt.id !== optionId),
-                updatedAt: new Date().toISOString(),
-              }
-            : attr
-        )
+  const handleDeleteAttribute = async () => {
+    if (activeAttribute) {
+      try {
+        const { error } = await supabase.from('attributes').delete().eq('id', activeAttribute.id);
+        if (error) throw error;
+        toast.success('Attribute deleted successfully');
+        queryClient.invalidateQueries({ queryKey: ["attributes"] });
+      } catch (e: any) {
+        toast.error(e.message || 'Failed to delete attribute');
+      }
+    }
+    setDeleteDialogOpen(false);
+    setSelectedAttributeId(null);
+  };
+
+  const handleAddOption = async () => {
+    const valueToSave = (newOption.label || newOption.value).trim().toLowerCase();
+
+    if (!valueToSave) {
+      toast.error('Option value is required');
+      return;
+    }
+
+    if (activeAttribute) {
+      // Client-side duplicate prevention (case-insensitive)
+      const isDuplicate = activeAttribute.attribute_options?.some((opt) => 
+        opt.value.toLowerCase() === valueToSave
       );
 
-      setSelectedAttribute((prev) =>
-        prev ? { ...prev, options: prev.options.filter((opt) => opt.id !== optionId) } : null
-      );
+      if (isDuplicate) {
+        toast.error(`Option "${valueToSave}" already exists for this attribute.`);
+        return;
+      }
 
-      toast.success('Option removed');
+      try {
+        await createOption.mutateAsync({
+          attribute_id: activeAttribute.id,
+          value: valueToSave,
+          meta: activeAttribute.type === 'color' ? { hex: newOption.colorHex } : {}
+        });
+        
+        setNewOption({ value: '', label: '', colorHex: '' });
+        toast.success('Option added successfully');
+      } catch (e: any) {
+        if (e.code === '23505') {
+          toast.error('Database Error: Option already exists.');
+        } else {
+          toast.error(e.message || 'Failed to add option');
+        }
+      }
+    }
+  };
+
+  const handleRemoveOption = async (optionId: string) => {
+    if (activeAttribute) {
+      try {
+        const { error } = await supabase.from('attribute_options').delete().eq('id', optionId);
+        if (error) throw error;
+        toast.success('Option removed');
+        queryClient.invalidateQueries({ queryKey: ["attributes"] });
+      } catch (e: any) {
+        toast.error(e.message || 'Failed to remove option');
+      }
     }
   };
 
   const formatDate = (dateString: string) => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
     });
   };
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-64"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -365,13 +390,13 @@ export default function Attributes() {
                       <TableCell>
                         <div>
                           <p className="font-medium">{attribute.name}</p>
-                          <p className="text-xs text-muted-foreground">{attribute.slug}</p>
+                          <p className="text-xs text-muted-foreground">ID: {attribute.id.slice(0,8)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <TypeIcon className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm">{attributeTypeLabels[attribute.type]}</span>
+                          {TypeIcon && <TypeIcon className="h-4 w-4 text-muted-foreground" />}
+                          <span className="text-sm">{attributeTypeLabels[attribute.type as keyof typeof attributeTypeLabels] || attribute.type}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -384,29 +409,30 @@ export default function Attributes() {
                           <div className="flex items-center gap-2">
                             {attribute.type === 'color' ? (
                               <div className="flex -space-x-1">
-                                {attribute.options.slice(0, 5).map((opt) => (
+                                {(attribute.attribute_options || []).slice(0, 5).map((opt) => (
                                   <div
                                     key={opt.id}
                                     className="h-5 w-5 rounded-full border-2 border-background"
-                                    style={{ backgroundColor: opt.colorHex }}
+                                    style={{ backgroundColor: opt.meta?.hex || '#ccc' }}
+                                    title={opt.value}
                                   />
                                 ))}
-                                {attribute.options.length > 5 && (
+                                {(attribute.attribute_options?.length || 0) > 5 && (
                                   <div className="h-5 w-5 rounded-full border-2 border-background bg-muted flex items-center justify-center text-[10px]">
-                                    +{attribute.options.length - 5}
+                                    +{(attribute.attribute_options?.length || 0) - 5}
                                   </div>
                                 )}
                               </div>
                             ) : (
                               <div className="flex flex-wrap gap-1 max-w-[200px]">
-                                {attribute.options.slice(0, 3).map((opt) => (
+                                {(attribute.attribute_options || []).slice(0, 3).map((opt) => (
                                   <Badge key={opt.id} variant="secondary" className="text-xs">
-                                    {opt.label}
+                                    {opt.value}
                                   </Badge>
                                 ))}
-                                {attribute.options.length > 3 && (
+                                {(attribute.attribute_options?.length || 0) > 3 && (
                                   <Badge variant="outline" className="text-xs">
-                                    +{attribute.options.length - 3}
+                                    +{(attribute.attribute_options?.length || 0) - 3}
                                   </Badge>
                                 )}
                               </div>
@@ -416,25 +442,17 @@ export default function Attributes() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-muted-foreground">
-                          {attribute.productCount} products
+                          Dynamic
                         </span>
                       </TableCell>
                       <TableCell>
-                        {attribute.isFilterable ? (
                           <Check className="h-4 w-4 text-success" />
-                        ) : (
-                          <X className="h-4 w-4 text-muted-foreground" />
-                        )}
                       </TableCell>
                       <TableCell>
-                        {attribute.isVisible ? (
                           <Check className="h-4 w-4 text-success" />
-                        ) : (
-                          <X className="h-4 w-4 text-muted-foreground" />
-                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
-                        {formatDate(attribute.updatedAt)}
+                        -
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -456,7 +474,7 @@ export default function Attributes() {
                             <DropdownMenuItem
                               className="text-destructive"
                               onClick={() => {
-                                setSelectedAttribute(attribute);
+                                setSelectedAttributeId(attribute.id);
                                 setDeleteDialogOpen(true);
                               }}
                             >
@@ -479,9 +497,9 @@ export default function Attributes() {
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{selectedAttribute ? 'Edit Attribute' : 'Create Attribute'}</DialogTitle>
+            <DialogTitle>{activeAttribute ? 'Edit Attribute' : 'Create Attribute'}</DialogTitle>
             <DialogDescription>
-              {selectedAttribute
+              {activeAttribute
                 ? 'Update the attribute details below'
                 : 'Add a new product attribute for variations'}
             </DialogDescription>
@@ -512,7 +530,7 @@ export default function Attributes() {
               <Label htmlFor="type">Type</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value: Attribute['type']) =>
+                onValueChange={(value: string) =>
                   setFormData((prev) => ({ ...prev, type: value }))
                 }
               >
@@ -605,7 +623,7 @@ export default function Attributes() {
               Cancel
             </Button>
             <Button onClick={handleSaveAttribute}>
-              {selectedAttribute ? 'Save Changes' : 'Create Attribute'}
+              {activeAttribute ? 'Save Changes' : 'Create Attribute'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -615,7 +633,7 @@ export default function Attributes() {
       <Dialog open={optionsDialogOpen} onOpenChange={setOptionsDialogOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Manage Options: {selectedAttribute?.name}</DialogTitle>
+            <DialogTitle>Manage Options: {activeAttribute?.name}</DialogTitle>
             <DialogDescription>
               Add, remove, or reorder options for this attribute
             </DialogDescription>
@@ -647,10 +665,10 @@ export default function Attributes() {
                       id="optionValue"
                       value={newOption.value}
                       onChange={(e) => setNewOption((prev) => ({ ...prev, value: e.target.value }))}
-                      placeholder="Value (e.g., lg)"
+                      placeholder="Value (e.g., lg or Large)"
                     />
                   </div>
-                  {selectedAttribute?.type === 'color' && (
+                  {activeAttribute?.type === 'color' && (
                     <div className="w-24">
                       <Label htmlFor="optionColor" className="sr-only">
                         Color
@@ -687,32 +705,31 @@ export default function Attributes() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm">
-                  Current Options ({selectedAttribute?.options.length || 0})
+                  Current Options ({activeAttribute?.attribute_options?.length || 0})
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {selectedAttribute?.options.length === 0 ? (
+                {activeAttribute?.attribute_options?.length === 0 || !activeAttribute?.attribute_options ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
                     No options added yet. Add your first option above.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {selectedAttribute?.options.map((option, index) => (
+                    {activeAttribute?.attribute_options?.map((option, index) => (
                       <div
                         key={option.id}
                         className="flex items-center gap-3 p-2 rounded-lg border bg-muted/30"
                       >
                         <GripVertical className="h-4 w-4 text-muted-foreground cursor-move" />
                         <span className="text-sm text-muted-foreground w-6">{index + 1}</span>
-                        {selectedAttribute.type === 'color' && option.colorHex && (
+                        {activeAttribute.type === 'color' && option.meta?.hex && (
                           <div
                             className="h-6 w-6 rounded-full border"
-                            style={{ backgroundColor: option.colorHex }}
+                            style={{ backgroundColor: option.meta.hex }}
                           />
                         )}
                         <div className="flex-1">
-                          <span className="font-medium">{option.label}</span>
-                          <span className="text-xs text-muted-foreground ml-2">({option.value})</span>
+                          <span className="font-medium">{option.value}</span>
                         </div>
                         <Button
                           variant="ghost"
@@ -741,9 +758,8 @@ export default function Attributes() {
           <DialogHeader>
             <DialogTitle>Delete Attribute</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{selectedAttribute?.name}"? This will remove the
-              attribute and all its options from{' '}
-              {selectedAttribute?.productCount || 0} products. This action cannot be undone.
+              Are you sure you want to delete "{activeAttribute?.name}"? This will remove the
+              attribute and all its options from products. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

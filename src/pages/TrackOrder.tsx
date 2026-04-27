@@ -32,7 +32,8 @@ const statusSteps = [
 
 export default function TrackOrder() {
   const [searchParams] = useSearchParams();
-  const [searchValue, setSearchValue] = useState(searchParams.get('order') || '');
+  const [orderNumber, setOrderNumber] = useState(searchParams.get('order') || '');
+  const [contactInfo, setContactInfo] = useState('');
   const [order, setOrder] = useState<TrackedOrder | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [notFound, setNotFound] = useState(false);
@@ -43,48 +44,30 @@ export default function TrackOrder() {
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    const query = searchValue.trim();
-    if (!query) return;
+    const orderQuery = orderNumber.trim().toUpperCase();
+    const contactQuery = contactInfo.trim();
+    
+    if (!orderQuery || !contactQuery) return;
 
     setIsSearching(true);
     setNotFound(false);
     setOrder(null);
 
     try {
-      // Search by order number or phone
-      let orderQuery = supabase
-        .from('orders')
-        .select('*');
-
-      if (query.toUpperCase().startsWith('SM')) {
-        orderQuery = orderQuery.eq('order_number', query.toUpperCase());
-      } else {
-        orderQuery = orderQuery.eq('shipping_phone', query);
-      }
-
-      const { data: orders, error } = await orderQuery
-        .order('created_at', { ascending: false })
-        .limit(1);
+      // Secure backend RPC call matching order number AND phone/email
+      const { data: foundOrder, error } = await supabase.rpc('get_guest_order_tracking', {
+        p_order_number: orderQuery,
+        p_contact: contactQuery
+      });
 
       if (error) throw error;
 
-      if (!orders || orders.length === 0) {
+      if (!foundOrder) {
         setNotFound(true);
         return;
       }
 
-      const foundOrder = orders[0];
-
-      // Fetch order items
-      const { data: items } = await supabase
-        .from('order_items')
-        .select('product_name, quantity, unit_price')
-        .eq('order_id', foundOrder.id);
-
-      setOrder({
-        ...foundOrder,
-        items: (items || []) as any[],
-      } as TrackedOrder);
+      setOrder(foundOrder as TrackedOrder);
     } catch (error) {
       console.error('Track order error:', error);
       setNotFound(true);
@@ -95,7 +78,7 @@ export default function TrackOrder() {
 
   // Auto-search if order number passed via URL
   useEffect(() => {
-    if (searchValue) {
+    if (orderNumber && contactInfo) {
       handleSearch();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -121,27 +104,35 @@ export default function TrackOrder() {
         {/* Search Form */}
         <div className="max-w-md mx-auto mb-12">
           <form onSubmit={handleSearch} className="space-y-4">
-            <div>
-              <Label htmlFor="search">Order Number or Phone Number</Label>
-              <div className="flex gap-2 mt-1">
+            <div className="space-y-4">
+              <div className="space-y-2 text-left">
+                <Label htmlFor="orderNumber">Order Number</Label>
                 <Input
-                  id="search"
-                  placeholder="e.g., SM12345678 or 0771234567"
-                  value={searchValue}
-                  onChange={(e) => setSearchValue(e.target.value)}
-                  className="flex-1"
+                  id="orderNumber"
+                  placeholder="e.g., SM12345678"
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(e.target.value)}
                 />
-                <Button type="submit" disabled={isSearching}>
-                  {isSearching ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <Search className="h-4 w-4 mr-2" />
-                      Track
-                    </>
-                  )}
-                </Button>
               </div>
+              <div className="space-y-2 text-left">
+                <Label htmlFor="contactInfo">Phone Number or Email</Label>
+                <Input
+                  id="contactInfo"
+                  placeholder="Used during checkout (e.g., 0771234567)"
+                  value={contactInfo}
+                  onChange={(e) => setContactInfo(e.target.value)}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isSearching || !orderNumber || !contactInfo}>
+                {isSearching ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" />
+                    Track Order
+                  </>
+                )}
+              </Button>
             </div>
           </form>
         </div>

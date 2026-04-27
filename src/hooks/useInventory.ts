@@ -50,6 +50,7 @@ export function useStockAdjustmentMutations() {
     qc.invalidateQueries({ queryKey: ['stock_adjustments'] });
     qc.invalidateQueries({ queryKey: ['stock_ledger'] });
     qc.invalidateQueries({ queryKey: ['inventory_overview'] });
+    qc.invalidateQueries({ queryKey: ['products'] }); // Refresh catalog
   };
 
   const createAdjustment = useMutation({

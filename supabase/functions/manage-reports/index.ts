@@ -30,16 +30,19 @@ Deno.serve(async (req) => {
         since.setDate(since.getDate() - days);
         const sinceISO = since.toISOString();
 
-        // Fetch orders + POS transactions in parallel
-        const [ordersRes, posRes] = await Promise.all([
+        // Fetch orders, POS transactions, and POS returns in parallel
+        const [ordersRes, posRes, returnsRes] = await Promise.all([
           client.from("orders").select("id, total, order_status, created_at").gte("created_at", sinceISO).neq("order_status", "cancelled"),
           client.from("pos_transactions").select("id, total, payment_method, status, created_at").gte("created_at", sinceISO).eq("status", "completed"),
+          client.from("pos_returns").select("id, refund_amount, status, created_at").gte("created_at", sinceISO).eq("status", "completed"),
         ]);
         if (ordersRes.error) throw ordersRes.error;
         if (posRes.error) throw posRes.error;
+        if (returnsRes.error) throw returnsRes.error;
 
         const orders = ordersRes.data || [];
         const posTransactions = posRes.data || [];
+        const posReturns = returnsRes.data || [];
 
         // Group by date
         const byDay: Record<string, { onlineSales: number; posSales: number; orders: number }> = {};
@@ -61,6 +64,12 @@ Deno.serve(async (req) => {
           const day = t.created_at.split("T")[0];
           if (byDay[day]) {
             byDay[day].posSales += Number(t.total);
+          }
+        }
+        for (const r of posReturns) {
+          const day = r.created_at.split("T")[0];
+          if (byDay[day]) {
+            byDay[day].posSales -= Number(r.refund_amount);
           }
         }
 
@@ -100,10 +109,12 @@ Deno.serve(async (req) => {
           successRate: method === "cod" ? 92 : 99, // simplified
         }));
 
-        // Monthly summary
+        // Monthly summary: Net Sales
         const totalOnline = orders.reduce((s, o) => s + Number(o.total), 0);
-        const totalPOS = posTransactions.reduce((s, t) => s + Number(t.total), 0);
-        const totalRevenue = totalOnline + totalPOS;
+        const totalPOSGross = posTransactions.reduce((s, t) => s + Number(t.total), 0);
+        const totalRefunds = posReturns.reduce((s, r) => s + Number(r.refund_amount), 0);
+        const totalPOSNet = totalPOSGross - totalRefunds;
+        const totalRevenue = totalOnline + totalPOSNet;
         const totalOrderCount = orders.length;
 
         // Get customer counts

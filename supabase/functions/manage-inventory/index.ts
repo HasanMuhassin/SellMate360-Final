@@ -130,14 +130,9 @@ Deno.serve(async (req) => {
           .single();
         if (error) throw error;
 
-        const newStock = Math.max(0, (adj.quantity_before || 0) + adj.quantity_change);
-        await client
-          .from("products")
-          .update({
-            stock: newStock,
-            stock_status: newStock <= 0 ? 'out-of-stock' : newStock <= 5 ? 'low-stock' : 'in-stock',
-          })
-          .eq("id", adj.product_id);
+        // NOTE: Product stock is now automatically updated via the 
+        // trigger_update_product_stock PostgreSQL trigger in the database.
+        // We no longer manually update products.stock here to avoid double-counting.
 
         await client.from("stock_ledger").insert({
           product_id: adj.product_id,

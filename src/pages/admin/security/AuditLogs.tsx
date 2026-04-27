@@ -82,14 +82,30 @@ export default function AuditLogsPage() {
   const renderDetails = (details: any) => {
     if (!details) return '-';
     if (typeof details === 'string') return details;
+    
     if (typeof details === 'object') {
-      // If it's the standard {note: "..."} format we often use
       if (details.note && Object.keys(details).length === 1) return details.note;
-      // Otherwise list keys
-      return Object.entries(details)
-        .map(([k, v]) => `${k}: ${v}`)
-        .join(', ');
+      
+      // If generated from our trigger with 'new' or 'old' record
+      const record = details.new || details.old || details;
+      
+      const keyFields = [];
+      if (record.name || record.product_name) keyFields.push(`Name: ${record.name || record.product_name}`);
+      if (record.price || record.selling_price) keyFields.push(`Price: ${record.price || record.selling_price}`);
+      if (record.stock !== undefined) keyFields.push(`Stock: ${record.stock}`);
+      if (record.status) keyFields.push(`Status: ${record.status}`);
+      if (record.order_status) keyFields.push(`Order Status: ${record.order_status}`);
+
+      if (keyFields.length > 0) {
+        return keyFields.join(' | ');
+      }
+
+      // Fallback: Show a few keys
+      const entries = Object.entries(record).slice(0, 3);
+      return entries.map(([k, v]) => `${k}: ${v !== null && typeof v === 'object' ? '[Object]' : v}`).join(', ') + 
+             (Object.keys(record).length > 3 ? '...' : '');
     }
+    
     return String(details);
   };
 
@@ -209,14 +225,27 @@ export default function AuditLogsPage() {
               </div>
               <div><p className="text-sm text-muted-foreground">Resource</p><p className="font-medium capitalize">{selectedLog.resource}</p>{selectedLog.resource_id && <p className="text-sm font-mono text-muted-foreground">{selectedLog.resource_id}</p>}</div>
               <div>
-                <p className="text-sm text-muted-foreground">Details</p>
-                <div className="p-3 rounded-lg bg-muted/50 text-sm overflow-auto max-h-40">
-                  {typeof selectedLog.details === 'object' ? (
-                    <pre className="whitespace-pre-wrap">{JSON.stringify(selectedLog.details, null, 2)}</pre>
-                  ) : (
-                    <p>{selectedLog.details}</p>
-                  )}
-                </div>
+                <p className="text-sm text-muted-foreground mb-2">Details</p>
+                {typeof selectedLog.details === 'object' && selectedLog.details.old && selectedLog.details.new ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950/20 text-sm overflow-auto max-h-60 border border-red-100 dark:border-red-900/30">
+                      <p className="font-semibold text-red-800 dark:text-red-300 mb-2">Previous State</p>
+                      <pre className="whitespace-pre-wrap text-xs font-mono">{JSON.stringify(selectedLog.details.old, null, 2)}</pre>
+                    </div>
+                    <div className="p-3 rounded-lg bg-green-50 dark:bg-green-950/20 text-sm overflow-auto max-h-60 border border-green-100 dark:border-green-900/30">
+                      <p className="font-semibold text-green-800 dark:text-green-300 mb-2">New State</p>
+                      <pre className="whitespace-pre-wrap text-xs font-mono">{JSON.stringify(selectedLog.details.new, null, 2)}</pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-lg bg-muted/50 text-sm overflow-auto max-h-60">
+                    {typeof selectedLog.details === 'object' ? (
+                      <pre className="whitespace-pre-wrap text-xs font-mono">{JSON.stringify(selectedLog.details, null, 2)}</pre>
+                    ) : (
+                      <p>{selectedLog.details}</p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div><p className="text-sm text-muted-foreground">IP Address</p><p className="font-mono text-sm">{selectedLog.ip_address}</p></div>

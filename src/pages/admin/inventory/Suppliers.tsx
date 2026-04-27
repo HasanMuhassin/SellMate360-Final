@@ -88,7 +88,7 @@ export default function Suppliers() {
     deleteSupplier.mutate(selectedSupplier.id, { onSuccess: () => { setDeleteDialogOpen(false); setSelectedSupplier(null); } });
   };
 
-  const SupplierForm = () => (
+  const renderSupplierForm = () => (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2"><Label>Supplier Name *</Label><Input value={formData.name} onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))} placeholder="e.g., TechPro Distributors" /></div>
@@ -205,11 +205,11 @@ export default function Suppliers() {
       </Card>
 
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Add Supplier</DialogTitle><DialogDescription>Add a new supplier.</DialogDescription></DialogHeader><SupplierForm /><DialogFooter><Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button><Button onClick={handleSave} disabled={createSupplier.isPending}>Save</Button></DialogFooter></DialogContent>
+        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Add Supplier</DialogTitle><DialogDescription>Add a new supplier.</DialogDescription></DialogHeader>{renderSupplierForm()}<DialogFooter><Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button><Button onClick={handleSave} disabled={createSupplier.isPending}>Save</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Edit Supplier</DialogTitle><DialogDescription>Update supplier information.</DialogDescription></DialogHeader><SupplierForm /><DialogFooter><Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button><Button onClick={handleUpdate} disabled={updateSupplier.isPending}>Update</Button></DialogFooter></DialogContent>
+        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Edit Supplier</DialogTitle><DialogDescription>Update supplier information.</DialogDescription></DialogHeader>{renderSupplierForm()}<DialogFooter><Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button><Button onClick={handleUpdate} disabled={updateSupplier.isPending}>Update</Button></DialogFooter></DialogContent>
       </Dialog>
 
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>

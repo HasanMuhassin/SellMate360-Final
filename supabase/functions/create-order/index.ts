@@ -13,7 +13,7 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const { order, items } = await req.json();
     if (!order || !items || !Array.isArray(items) || items.length === 0) {
@@ -34,17 +34,17 @@ serve(async (req) => {
       .from("orders")
       .insert({
         // ── Required fields (NOT NULL, no default) ──
-        shipping_name:     order.shipping_name,
-        shipping_phone:    order.shipping_phone,
+        shipping_name: order.shipping_name,
+        shipping_phone: order.shipping_phone,
         shipping_district: order.shipping_district,
-        shipping_city:     order.shipping_city,
-        shipping_street:   order.shipping_street,
-        subtotal:          orderTotal,
-        total:             orderTotal,
-        payment_method:    order.payment_method ?? "cod",  // enum: 'cod'|'card'|'online'
+        shipping_city: order.shipping_city,
+        shipping_street: order.shipping_street,
+        subtotal: orderTotal,
+        total: orderTotal,
+        payment_method: order.payment_method ?? "cod",  // enum: 'cod'|'card'|'online'
         // ── Optional fields ──
-        reseller_id:       order.reseller_id    ?? null,
-        shipping_email:    order.shipping_email ?? null,
+        reseller_id: order.reseller_id ?? null,
+        shipping_email: order.shipping_email ?? null,
         // order_status, payment_status, channel, cod_risk → use DB defaults
       })
       .select()
@@ -60,13 +60,13 @@ serve(async (req) => {
 
     // ── Step 2: Insert order items linked to the new order ───────────────────
     const orderItems = items.map((item: Record<string, unknown>) => ({
-      order_id:     newOrder.id,
-      product_id:   item.product_id,
+      order_id: newOrder.id,
+      product_id: item.product_id,
       product_name: String(item.product_name ?? ""),
-      product_sku:  String(item.product_sku  ?? ""),  // NOT NULL in live schema
-      quantity:     Number(item.quantity   ?? 1),
-      unit_price:   Number(item.unit_price ?? 0),
-      total:        Number(item.total_price ?? item.unit_price ?? 0),  // column is 'total' not 'total_price'
+      product_sku: String(item.product_sku ?? ""),  // NOT NULL in live schema
+      quantity: Number(item.quantity ?? 1),
+      unit_price: Number(item.unit_price ?? 0),
+      total: Number(item.total_price ?? item.unit_price ?? 0),  // column is 'total' not 'total_price'
     }));
 
     const { error: itemsError } = await db
@@ -86,15 +86,15 @@ serve(async (req) => {
     // ── Audit log ─────────────────────────────────────────────────────────────
     try {
       await db.from("audit_logs").insert({
-        action:      "order_created",
-        resource:    "orders",
+        action: "order_created",
+        resource: "orders",
         resource_id: newOrder.id,
         details: {
           order_number: newOrder.order_number,
-          total:        newOrder.total,
-          items_count:  items.length,
+          total: newOrder.total,
+          items_count: items.length,
         },
-        level:     "info",
+        level: "info",
         user_name: order.shipping_name || "Customer",
         user_role: "customer",
       });

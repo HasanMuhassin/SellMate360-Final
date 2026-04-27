@@ -111,6 +111,20 @@ export function useCreateOrder() {
       order: Omit<Order, 'id' | 'created_at' | 'updated_at' | 'order_number' | 'customer' | 'items' | 'timeline'>;
       items: Omit<OrderItem, 'id' | 'created_at' | 'order_id'>[];
     }) => {
+      // 1. Verify stock for all items before placing order
+      for (const item of items) {
+        if (!item.product_id) continue;
+        const { data: product } = await supabase
+          .from('products')
+          .select('stock, name')
+          .eq('id', item.product_id)
+          .single();
+          
+        if (product && product.stock < (item.quantity || 0)) {
+          throw new Error(`Insufficient stock for ${product.name || 'product'}. Available: ${product.stock}, Requested: ${item.quantity}`);
+        }
+      }
+
       // Create order first
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
@@ -147,6 +161,21 @@ export function useUpdateOrderStatus() {
 
   return useMutation({
     mutationFn: async ({ id, status }: { id: string; status: OrderStatus }) => {
+      // 1. Fetch current order to compare status and get items
+      const { data: currentOrder, error: fetchError } = await supabase
+        .from('orders')
+        .select(`
+          order_status,
+          items:order_items(product_id, quantity)
+        `)
+        .eq('id', id)
+        .single();
+
+      if (fetchError) throw fetchError;
+      
+      const oldStatus = currentOrder.order_status;
+      const newStatus = status;
+
       const updateData: Partial<Order> = { order_status: status };
       
       // Set timestamp based on status
@@ -163,6 +192,70 @@ export function useUpdateOrderStatus() {
         .single();
       
       if (error) throw error;
+
+      // 3. Handle Stock Management
+      const activeStatuses = ['confirmed', 'processing', 'shipped', 'delivered'];
+      const oldWasActive = activeStatuses.includes(oldStatus);
+      const newIsActive = activeStatuses.includes(newStatus);
+
+      // Rule 1 & 3 & 4 & 5: Reduce stock if moving to CONFIRMED (or beyond) and wasn't already
+      if (newIsActive && !oldWasActive) {
+        // Step A: Validate all items have sufficient stock first
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock, name')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product && product.stock < (item.quantity || 0)) {
+            throw new Error(`Insufficient stock for ${product.name || 'product'}. Available: ${product.stock}, Requested: ${item.quantity}`);
+          }
+        }
+
+        // Step B: If validation passes, deduct stock
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product) {
+            // Prevent stock from going below zero
+            const newStock = Math.max(0, Number(product.stock) - Number(item.quantity || 0));
+            await supabase
+              .from('products')
+              .update({ stock: newStock })
+              .eq('id', item.product_id);
+          }
+        }
+      } 
+      // Rule 2: Restore stock if moving to CANCELLED and was previously confirmed
+      else if (newStatus === 'cancelled' && oldWasActive) {
+        for (const item of currentOrder.items || []) {
+          if (!item.product_id) continue;
+          
+          const { data: product } = await supabase
+            .from('products')
+            .select('stock')
+            .eq('id', item.product_id)
+            .single();
+            
+          if (product) {
+            const newStock = Number(product.stock) + Number(item.quantity || 0);
+            await supabase
+              .from('products')
+              .update({ stock: newStock })
+              .eq('id', item.product_id);
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: (data) => {

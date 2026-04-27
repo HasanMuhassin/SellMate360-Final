@@ -53,6 +53,7 @@ import StockTransfers from "./pages/admin/inventory/StockTransfers";
 import Suppliers from "./pages/admin/inventory/Suppliers";
 import OrderList from "./pages/admin/orders/OrderList";
 import OrderDetails from "./pages/admin/orders/OrderDetails";
+import OrderInvoice from "./pages/admin/orders/OrderInvoice";
 import ShipmentList from "./pages/admin/shipping/ShipmentList";
 import ShipmentDetails from "./pages/admin/shipping/ShipmentDetails";
 import CreateShipment from "./pages/admin/shipping/CreateShipment";
@@ -167,6 +168,7 @@ const App = () => (
                     <Route path="orders/processing" element={<OrderList />} />
                     <Route path="orders/completed" element={<OrderList />} />
                     <Route path="orders/:id" element={<OrderDetails />} />
+                    <Route path="orders/:id/invoice" element={<OrderInvoice />} />
                     {/* POS Module */}
                     <Route path="pos" element={<POSOrders />} />
                     <Route path="pos/new" element={<NewSale />} />

@@ -112,11 +112,22 @@ export default function ProductDetail() {
   );
   const whatsappUrl = `https://wa.me/+94771234567?text=${whatsappMessage}`;
 
-  const stockBadge = {
-    'in-stock': { label: 'In Stock', className: 'badge-in-stock' },
-    'low-stock': { label: 'Only ' + product.stock + ' left', className: 'badge-low-stock' },
-    'out-of-stock': { label: 'Out of Stock', className: 'badge-out-of-stock' },
-  };
+  const stock = product.stock || 0;
+  const isOutOfStock = stock <= 0;
+
+  let stockLabel = '';
+  let stockClass = '';
+
+  if (isOutOfStock) {
+    stockLabel = 'Out of Stock';
+    stockClass = 'badge-out-of-stock';
+  } else if (stock <= 5) {
+    stockLabel = `Only ${stock} left`;
+    stockClass = 'badge-low-stock';
+  } else {
+    stockLabel = `In Stock (${stock} items)`;
+    stockClass = 'badge-in-stock';
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -187,8 +198,8 @@ export default function ProductDetail() {
                 <span className="text-sm font-medium">{product.rating}</span>
                 <span className="text-sm text-muted-foreground">({product.reviewCount} reviews)</span>
               </div>
-              <Badge variant="outline" className={cn('text-sm', stockBadge[product.stockStatus].className)}>
-                {stockBadge[product.stockStatus].label}
+              <Badge variant="outline" className={cn('text-sm', stockClass)}>
+                {stockLabel}
               </Badge>
             </div>
 
@@ -205,16 +216,16 @@ export default function ProductDetail() {
               <label className="text-sm font-medium block mb-2">Quantity</label>
               <div className="flex items-center gap-3">
                 <div className="flex items-center border border-border rounded-lg">
-                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={product.stockStatus === 'out-of-stock'}>
+                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.max(1, quantity - 1))} disabled={isOutOfStock}>
                     <Minus className="h-4 w-4" />
                   </Button>
                   <span className="w-12 text-center font-medium">{quantity}</span>
-                  <Button variant="ghost" size="icon" onClick={() => setQuantity(quantity + 1)} disabled={product.stockStatus === 'out-of-stock'}>
+                  <Button variant="ghost" size="icon" onClick={() => setQuantity(Math.min(stock, quantity + 1))} disabled={isOutOfStock || quantity >= stock}>
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
-                {product.stockStatus === 'low-stock' && (
-                  <span className="text-sm text-warning">Only {product.stock} left in stock</span>
+                {stock > 0 && stock <= 5 && (
+                  <span className="text-sm text-warning">Only {stock} left in stock</span>
                 )}
               </div>
             </div>
@@ -243,11 +254,11 @@ export default function ProductDetail() {
             </div>
 
             <div className="flex flex-col sm:flex-row gap-3">
-              <Button size="lg" className="flex-1" onClick={handleAddToCart} disabled={product.stockStatus === 'out-of-stock'}>
+              <Button size="lg" className="flex-1" onClick={handleAddToCart} disabled={isOutOfStock}>
                 <ShoppingCart className="h-5 w-5 mr-2" />
                 Add to Cart
               </Button>
-              <Button size="lg" variant="outline" className="flex-1" disabled={product.stockStatus === 'out-of-stock'} asChild>
+              <Button size="lg" variant="outline" className="flex-1" disabled={isOutOfStock} asChild>
                 <Link to="/checkout">Buy Now</Link>
               </Button>
             </div>

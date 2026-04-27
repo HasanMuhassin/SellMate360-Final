@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Save, Package, DollarSign, Image, Search, X, Upload, Trash2, GripVertical } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Save, Package, DollarSign, Image, Search, X, Upload, Trash2, GripVertical, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,8 @@ import { useProduct, useCreateProduct, useUpdateProduct } from '@/hooks/useProdu
 import { useCategories } from '@/hooks/useCategories';
 import { useBrands } from '@/hooks/useBrands';
 import { useCreateAuditLog } from '@/hooks/useSecurity';
+import { useAttributes, useProductAttributes } from '@/hooks/useAttributes';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface ProductFormData {
@@ -36,20 +38,22 @@ interface ProductFormData {
   features: string[];
   isNew: boolean;
   isBestseller: boolean;
+  attributes: { attribute_id: string; option_id: string }[];
 }
 
 const steps = [
   { id: 1, name: 'Details', icon: Package, description: 'Basic product information' },
-  { id: 2, name: 'Pricing', icon: DollarSign, description: 'Cost and selling prices' },
-  { id: 3, name: 'Images', icon: Image, description: 'Product photos' },
-  { id: 4, name: 'SEO', icon: Search, description: 'Search optimization' },
+  { id: 2, name: 'Attributes', icon: Tag, description: 'Variations like size/color' },
+  { id: 3, name: 'Pricing', icon: DollarSign, description: 'Cost and selling prices' },
+  { id: 4, name: 'Images', icon: Image, description: 'Product photos' },
+  { id: 5, name: 'SEO', icon: Search, description: 'Search optimization' },
 ];
 
 const initialFormData: ProductFormData = {
   name: '', sku: '', description: '', categoryId: '', brandId: '',
   status: 'active', costPrice: 0, sellingPrice: 0, originalPrice: 0, resellerPrice: 0,
   stock: 0, imageUrl: '', galleryUrls: [], slug: '', metaTitle: '', metaDescription: '',
-  features: [], isNew: false, isBestseller: false,
+  features: [], isNew: false, isBestseller: false, attributes: [],
 };
 
 export default function ProductForm() {
@@ -58,6 +62,8 @@ export default function ProductForm() {
   const isEditing = Boolean(id);
 
   const { data: existingProduct, isLoading: loadingProduct } = useProduct(id || '');
+  const { data: existingAttributes } = useProductAttributes(id || '');
+  const { data: allAttributes = [] } = useAttributes();
   const { data: categories = [] } = useCategories();
   const { data: brands = [] } = useBrands();
   const createProduct = useCreateProduct();
@@ -92,10 +98,11 @@ export default function ProductForm() {
         features: existingProduct.features || [],
         isNew: existingProduct.is_new,
         isBestseller: existingProduct.is_bestseller,
+        attributes: existingAttributes ? existingAttributes.map((a: any) => ({ attribute_id: a.attribute_id, option_id: a.option_id })) : [],
       });
       setInitialized(true);
     }
-  }, [existingProduct, isEditing, initialized]);
+  }, [existingProduct, existingAttributes, isEditing, initialized]);
 
   const updateField = <K extends keyof ProductFormData>(field: K, value: ProductFormData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -159,7 +166,13 @@ export default function ProductForm() {
       if (isEditing && id) {
         await updateProduct.mutateAsync({ id, ...payload });
         
-        // Record update audit log
+        await supabase.from('product_attributes').delete().eq('product_id', id);
+        if (formData.attributes?.length > 0) {
+           await supabase.from('product_attributes').insert(
+             formData.attributes.map((a: any) => ({ product_id: id, attribute_id: a.attribute_id, option_id: a.option_id }))
+           );
+        }
+        
         createAuditLog.mutate({
           action: 'update_product',
           resource: 'catalog',
@@ -172,7 +185,12 @@ export default function ProductForm() {
       } else {
         const result = await createProduct.mutateAsync(payload as any);
         
-        // Record creation audit log
+        if (formData.attributes?.length > 0) {
+           await supabase.from('product_attributes').insert(
+             formData.attributes.map((a: any) => ({ product_id: result.id, attribute_id: a.attribute_id, option_id: a.option_id }))
+           );
+        }
+        
         createAuditLog.mutate({
           action: 'create_product',
           resource: 'catalog',
@@ -282,6 +300,62 @@ export default function ProductForm() {
       case 2:
         return (
           <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Product Attributes</CardTitle>
+                <CardDescription>Select options to assign to this product</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {allAttributes.length === 0 ? (
+                  <div className="text-center py-6 text-muted-foreground">
+                    No attributes found. Please create them in the Attributes tab.
+                  </div>
+                ) : (
+                  allAttributes.map((attr) => {
+                    if (!attr.attribute_options || attr.attribute_options.length === 0) return null;
+                    const selectedOption = (formData.attributes || []).find((a: any) => a.attribute_id === attr.id)?.option_id || 'none';
+                    return (
+                      <div key={attr.id} className="space-y-2">
+                        <Label>{attr.name}</Label>
+                        <Select 
+                          value={selectedOption} 
+                          onValueChange={(val) => {
+                            if (val === 'none') {
+                              updateField('attributes', (formData.attributes || []).filter((a: any) => a.attribute_id !== attr.id));
+                            } else {
+                              const existing = (formData.attributes || []).filter((a: any) => a.attribute_id !== attr.id);
+                              updateField('attributes', [...existing, { attribute_id: attr.id, option_id: val }]);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="w-full md:w-[300px]">
+                            <SelectValue placeholder={`Select ${attr.name}...`} />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Not assigned</SelectItem>
+                            {attr.attribute_options.map((opt) => (
+                              <SelectItem key={opt.id} value={opt.id}>
+                                {attr.type === 'color' && opt.meta?.hex ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-4 w-4 rounded-full border" style={{ backgroundColor: opt.meta.hex }} />
+                                    <span>{opt.value}</span>
+                                  </div>
+                                ) : opt.value}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        );
+      case 3:
+        return (
+          <div className="space-y-6">
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
                 <CardHeader>
@@ -339,7 +413,7 @@ export default function ProductForm() {
             </div>
           </div>
         );
-      case 3:
+      case 4:
         return (
           <div className="space-y-6">
             <Card>
@@ -404,7 +478,7 @@ export default function ProductForm() {
             </Card>
           </div>
         );
-      case 4:
+      case 5:
         return (
           <div className="space-y-6">
             <Card>

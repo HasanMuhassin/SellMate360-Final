@@ -606,43 +606,10 @@ export function useProcessPOSReturn() {
 
       if (error) throw error;
 
-      // If approved, restore stock for returned items
-      if (action === 'approve') {
-        const { data: returnItems } = await supabase
-          .from('pos_return_items')
-          .select('*')
-          .eq('return_id', returnId);
-
-        if (returnItems) {
-          for (const item of returnItems) {
-            await supabase
-              .from('products')
-              .update({ 
-                stock: supabase.rpc ? undefined : undefined // Will handle via raw update
-              })
-              .eq('id', item.product_id);
-
-            // Simple stock restoration
-            const { data: product } = await supabase
-              .from('products')
-              .select('stock')
-              .eq('id', item.product_id)
-              .single();
-
-            if (product) {
-              const newStock = product.stock + item.return_quantity;
-              await supabase
-                .from('products')
-                .update({ 
-                  stock: newStock,
-                  stock_status: newStock > 5 ? 'in-stock' : newStock > 0 ? 'low-stock' : 'out-of-stock',
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', item.product_id);
-            }
-          }
-        }
-      }
+      // Note: Stock restoration for returned items is now handled automatically 
+      // by the 'trigger_restore_stock_on_pos_return' PostgreSQL database trigger.
+      // We removed the frontend/client-side update loop here to prevent race conditions 
+      // and ensure a robust single source of truth.
 
       return data;
     },
