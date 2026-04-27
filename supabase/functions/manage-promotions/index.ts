@@ -33,8 +33,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const url = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-    const serviceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+    const url = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const client = createClient(url, serviceKey);
 
     const { action, ...payload } = await req.json();
@@ -184,6 +184,20 @@ Deno.serve(async (req) => {
           .single();
         if (error) throw error;
         await logAudit(client, { action: "flash_sale_created", resource: "promotions", resource_id: data.id, details: { name: payload.sale.name } });
+
+        // ── Fire-and-forget: Broadcast to all WhatsApp customers ──────────────
+        // We intentionally do NOT await this. The admin gets their response
+        // immediately; the broadcast runs asynchronously in its own function.
+        const broadcastUrl = `${url}/functions/v1/whatsapp-broadcast`;
+        fetch(broadcastUrl, {
+          method:  "POST",
+          headers: {
+            "Authorization": `Bearer ${serviceKey}`,
+            "Content-Type":  "application/json",
+          },
+          body: JSON.stringify({ sale: data }),
+        }).catch((err) => console.error("Failed to trigger WA broadcast:", err));
+
         return jsonResponse(data);
       }
 
