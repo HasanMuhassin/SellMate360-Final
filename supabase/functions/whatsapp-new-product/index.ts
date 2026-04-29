@@ -9,59 +9,62 @@ const corsHeaders = {
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
-interface FlashSale {
+interface NewProduct {
   id: string;
   name: string;
-  description?: string;
-  discount_type: "percentage" | "fixed";
-  discount_value: number;
-  starts_at: string;
-  ends_at: string;
-  badge_text?: string;
-  status: string;
+  description?: string | null;
+  selling_price: number;
+  original_price?: number | null;
+  sku?: string | null;
+  stock_status?: string | null;
+  status?: string;
 }
 
-// ─── AI: Generate the broadcast message ───────────────────────────────────────
-// NOTE: google client is intentionally created INSIDE the handler (lazy init),
-// exactly matching the working whatsapp-processor pattern to avoid cold-start crashes.
-async function generateFlashSaleMessage(sale: FlashSale): Promise<string> {
+// ─── AI: Generate new product announcement ────────────────────────────────────
+// Gemini client is intentionally created INSIDE the handler (lazy init)
+// to match the working whatsapp-processor pattern and avoid cold-start crashes.
+async function generateProductMessage(product: NewProduct): Promise<string> {
   const apiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
   console.log("[GEMINI] API key present:", !!apiKey);
 
   const google = createGoogleGenerativeAI({ apiKey: apiKey! });
 
-  const discountLabel =
-    sale.discount_type === "percentage"
-      ? `${sale.discount_value}% off`
-      : `Rs. ${sale.discount_value} off`;
+  const priceLabel = `Rs. ${product.selling_price.toLocaleString()}`;
+  const hasDiscount =
+    product.original_price && product.original_price > product.selling_price;
+  const discountNote = hasDiscount
+    ? ` (was Rs. ${product.original_price!.toLocaleString()})`
+    : "";
 
-  const startsAt = new Date(sale.starts_at).toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  });
-  const endsAt = new Date(sale.ends_at).toLocaleString("en-US", {
-    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-  });
+  const stockNote =
+    product.stock_status === "in-stock"
+      ? "in stock and ready to order"
+      : product.stock_status === "low-stock"
+      ? "available in limited quantity"
+      : "just added to our catalogue";
 
-  console.log("[GEMINI] Calling generateText for sale:", sale.name);
+  const prompt = `Generate a WhatsApp new product announcement for:
+Product Name: ${product.name}
+Price: ${priceLabel}${discountNote}
+Availability: ${stockNote}
+Description: ${product.description || "A great new addition to our catalogue"}`;
+
+  console.log("[GEMINI] Calling generateText for product:", product.name);
 
   const { text } = await generateText({
-    model: google("gemini-2.5-flash"),  // same model as whatsapp-processor (verified working)
+    model: google("gemini-2.5-flash"),
     system: `You are a WhatsApp marketing copywriter for SellMate, a Sri Lankan e-commerce store.
-Write a concise, exciting flash sale announcement for WhatsApp.
+Write a concise, exciting new product announcement for WhatsApp customers.
 
 Rules:
 - Maximum 5 sentences
-- Use 2-4 emojis, placed naturally (not all at the start)
+- Use 2-4 emojis, placed naturally
 - Plain text only — no markdown, no asterisks, no formatting codes
-- Mention the discount, sale name, and end time clearly
-- Last sentence must be a call to action directing them to visit https://sellmate.lk to grab the deal now
-- Sound human and excited, not robotic or template-like`,
-    prompt: `Generate a WhatsApp flash sale message for:
-Sale Name: ${sale.name}
-Discount: ${discountLabel}
-Description: ${sale.description || "Limited time offer on selected products"}
-Starts: ${startsAt}
-Ends: ${endsAt}`,
+- Mention the product name and price clearly
+- Make it sound exciting, like something they'd want to check out immediately
+- Last sentence must be a call to action directing them to visit https://sellmate.lk to order
+- Sound human and enthusiastic, not like a template`,
+    prompt,
   });
 
   console.log("[GEMINI] Response received, length:", text.length);
@@ -96,12 +99,14 @@ async function sendWhatsAppMessage(
 
     if (!res.ok) {
       const errBody = await res.text();
-      console.error(`[WA SEND] Failed for ${to.slice(0, 7)}*** HTTP ${res.status}:`, errBody);
+      console.error(`[WA] Failed for ${to.slice(0, 7)}*** HTTP ${res.status}:`, errBody);
+    } else {
+      console.log(`[WA] Sent OK to ${to.slice(0, 7)}***`);
     }
 
     return res.ok;
   } catch (err) {
-    console.error(`[WA SEND] Exception for ${to.slice(0, 7)}***:`, err);
+    console.error(`[WA] Exception for ${to.slice(0, 7)}***:`, err);
     return false;
   }
 }
@@ -110,9 +115,8 @@ async function sendWhatsAppMessage(
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  console.log("[BROADCAST] Handler invoked");
+  console.log("[NEW-PRODUCT] Handler invoked");
 
-  // Read all env vars INSIDE the handler (same pattern as working processor)
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const waToken     = Deno.env.get("WHATSAPP_API_TOKEN")!;
@@ -121,16 +125,16 @@ serve(async (req: Request) => {
   console.log("[ENV]", {
     supabaseUrl: supabaseUrl ? `set (${supabaseUrl})` : "MISSING",
     serviceKey:  serviceKey  ? `set (prefix: ${serviceKey.slice(0, 12)}...)` : "MISSING",
-    waToken:     waToken     ? `set (prefix: ${waToken.slice(0, 10)}...)` : "MISSING",
+    waToken:     waToken     ? `set` : "MISSING",
     waPhoneId:   waPhoneId   ? `set (${waPhoneId})` : "MISSING",
   });
 
   try {
-    const { sale }: { sale: FlashSale } = await req.json();
-    console.log(`[BROADCAST] Sale received: "${sale?.name}" id=${sale?.id}`);
+    const { product }: { product: NewProduct } = await req.json();
+    console.log(`[NEW-PRODUCT] Product received: "${product?.name}" id=${product?.id}`);
 
-    if (!sale?.id || !sale?.name) {
-      return new Response(JSON.stringify({ error: "Invalid sale payload" }), {
+    if (!product?.id || !product?.name) {
+      return new Response(JSON.stringify({ error: "Invalid product payload" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -138,7 +142,7 @@ serve(async (req: Request) => {
 
     const db = createClient(supabaseUrl, serviceKey);
 
-    // ── Step 1: Fetch WhatsApp customer phones ────────────────────────────────
+    // ── Step 1: Fetch all WhatsApp customer phones ────────────────────────────
     console.log("[DB] Querying wa_customers...");
     const { data: customers, error: custError } = await db
       .from("wa_customers")
@@ -153,6 +157,7 @@ serve(async (req: Request) => {
     console.log(`[DB] wa_customers: ${customers?.length ?? 0} rows`);
 
     if (!customers || customers.length === 0) {
+      console.log("[NEW-PRODUCT] No customers — returning early.");
       return new Response(
         JSON.stringify({ success: true, sent: 0, total: 0, reason: "No WhatsApp customers found" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -160,9 +165,9 @@ serve(async (req: Request) => {
     }
 
     // ── Step 2: Generate AI message ───────────────────────────────────────────
-    console.log("[BROADCAST] Generating AI message...");
-    const message = await generateFlashSaleMessage(sale);
-    console.log(`[BROADCAST] Message (${message.length} chars): "${message.slice(0, 80)}..."`);
+    console.log("[NEW-PRODUCT] Generating AI message...");
+    const message = await generateProductMessage(product);
+    console.log(`[NEW-PRODUCT] Message (${message.length} chars): "${message.slice(0, 80)}..."`);
 
     // ── Step 3: Send to each customer ─────────────────────────────────────────
     let sent = 0;
@@ -174,22 +179,20 @@ serve(async (req: Request) => {
       await new Promise((r) => setTimeout(r, 150));
     }
 
-    console.log(`[BROADCAST] Done — sent: ${sent}, failed: ${failed}`);
+    console.log(`[NEW-PRODUCT] Done — sent: ${sent}, failed: ${failed}`);
 
-    // ── Return 200 immediately — audit log is fire-and-forget ─────────────────
-    // supabase-js v2 never rejects promises, so .catch() is used defensively.
-    // We do NOT await this — return the success response first.
+    // ── Step 4: Audit log (fire-and-forget, not awaited) ─────────────────────
     void db.from("audit_logs").insert({
-      action:      "whatsapp_flash_sale_broadcast",
-      resource:    "promotions",
-      resource_id: sale.id,
-      details:     { sale_name: sale.name, sent, failed, total: customers.length, message_preview: message.slice(0, 120) },
+      action:      "whatsapp_new_product_broadcast",
+      resource:    "products",
+      resource_id: product.id,
+      details:     { product_name: product.name, price: product.selling_price, sent, failed, total: customers.length },
       level:       "info",
       user_name:   "System",
       user_role:   "admin",
     });
 
-    console.log("[BROADCAST] Returning 200 success response");
+    console.log("[NEW-PRODUCT] Returning 200 success response");
     return new Response(
       JSON.stringify({ success: true, sent, failed, total: customers.length }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -197,8 +200,8 @@ serve(async (req: Request) => {
 
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error("[BROADCAST] Unhandled error:", msg);
-    console.error("[BROADCAST] Stack:", err?.stack ?? "no stack");
+    console.error("[NEW-PRODUCT] Unhandled error:", msg);
+    console.error("[NEW-PRODUCT] Stack:", err?.stack ?? "no stack");
     return new Response(JSON.stringify({ error: msg }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

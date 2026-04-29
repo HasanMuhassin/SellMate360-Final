@@ -61,8 +61,10 @@ UNKNOWN — genuinely unclear even with conversation history.
 ─── CONTEXT RULES ───
 - You MUST read the full conversation history to resolve ambiguous messages.
 - If the latest message is short or vague (e.g. "yes", "that one", "how much?"), look at the most recent Agent and Customer messages to infer what product or action is being referred to.
-- If a product was mentioned in recent history, carry it forward as productName.
+- CRITICAL: If the customer's CURRENT message explicitly names a specific product, ALWAYS use that as productName — even if a DIFFERENT product was discussed in earlier history. Current message takes priority over history for product name extraction.
+- If a product was mentioned only in recent history (last 2 exchanges) and the current message is ambiguous, carry it forward as productName.
 - Prefer QUERY over UNKNOWN when there is any product reference in history.
+- If the message is just "ORDER", "buy", "purchase", "place order" with no product context in the CURRENT message, classify as ORDER with productName = null and missingFields = ["product", "quantity", "location"].
 
 ─── FIELD RULES ───
 - productName: extract EXACTLY as the customer said it. NO surrounding quotes. NO added words.

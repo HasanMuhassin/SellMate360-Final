@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { Product, ProductImage } from '@/types/database';
 
+const BROADCAST_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-new-product`;
+
 // =====================================================
 // QUERIES
 // =====================================================
@@ -127,8 +129,24 @@ export function useCreateProduct() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['products'] });
+
+      // Fire-and-forget: notify WhatsApp customers about the new product.
+      // We do NOT await this — the admin UI is never delayed by the broadcast.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        fetch(BROADCAST_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+          },
+          body: JSON.stringify({ product: data }),
+        }).catch((err) => console.warn('[WA Broadcast] Failed to trigger new-product notify:', err));
+      } catch (err) {
+        console.warn('[WA Broadcast] Could not get session for new-product notify:', err);
+      }
     },
   });
 }
