@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Plus, Search, Edit, Trash2, MoreHorizontal, FolderTree, ChevronRight, GripVertical, ImageIcon, Upload, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -392,11 +392,12 @@ export default function Categories() {
               ) : (
                 <>
                   {parentCategories.map((parent) => (
-                    <>{renderCategoryRow(parent)}
+                    <React.Fragment key={parent.id}>
+                      {renderCategoryRow(parent)}
                       {childCategories
                         .filter((c) => c.parent_id === parent.id)
                         .map((child) => renderCategoryRow(child, true))}
-                    </>
+                    </React.Fragment>
                   ))}
                   {/* Show orphaned children (parent filtered out) */}
                   {childCategories

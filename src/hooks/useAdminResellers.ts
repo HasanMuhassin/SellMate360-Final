@@ -26,7 +26,7 @@ export function useAdminResellers(filters?: ResellerFilters) {
     queryKey: ['admin-resellers', filters],
     queryFn: async () => {
       let query = supabase
-        .from('resellers')
+        .from('reseller_metrics_view' as any)
         .select('*')
         .order('created_at', { ascending: false });
 
@@ -58,7 +58,7 @@ export function useAdminResellerById(id?: string) {
       if (!id) return null;
 
       const { data, error } = await supabase
-        .from('resellers')
+        .from('reseller_metrics_view' as any)
         .select('*')
         .eq('id', id)
         .single();
@@ -75,7 +75,7 @@ export function useResellerApplications() {
     queryKey: ['reseller-applications'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('resellers')
+        .from('reseller_metrics_view' as any)
         .select('*')
         .order('created_at', { ascending: false });
 

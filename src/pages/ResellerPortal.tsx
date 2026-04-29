@@ -97,19 +97,19 @@ export default function ResellerPortal() {
   const [payoutAccountNumber, setPayoutAccountNumber] = useState('');
   const [payoutAccountHolder, setPayoutAccountHolder] = useState('');
   const [payoutBranch, setPayoutBranch] = useState('');
-  
+
   // Order form state
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerDistrict, setCustomerDistrict] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
-  
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const { session, loading: sessionLoading } = useSession();
   const { isApprovedReseller, reseller, isLoading: resellerLoading } = useIsApprovedReseller();
   const signOut = useSignOut();
-  
+
   // Fetch reseller data from database
   const { data: resellerOrders = [], isLoading: ordersLoading } = useResellerOrders(reseller?.id, { limit: 10 });
   const { data: ledgerEntries = [], isLoading: ledgerLoading } = useResellerLedger(reseller?.id, { limit: 20 });
@@ -118,7 +118,7 @@ export default function ResellerPortal() {
   const { data: codStats = { pendingCollection: 0, totalCodOrders: 0, successRate: 100 } } = useResellerCODStats(reseller?.id);
   const createPayoutRequest = useCreatePayoutRequest();
   const placeOrder = usePlaceResellerOrder();
-  
+
   // Compute stats from real reseller data
   const resellerStats = {
     totalSales: reseller?.total_revenue ?? 0,
@@ -132,7 +132,7 @@ export default function ResellerPortal() {
     tier: reseller?.tier ?? 'silver',
     discountPercentage: reseller?.tier === 'platinum' ? 20 : reseller?.tier === 'gold' ? 15 : 10,
   };
-  
+
   // Compute COD warnings
   const computedCodWarnings: { id: string; message: string; severity: 'high' | 'medium' }[] = [];
   if (resellerStats.codRejectionRate > 20) {
@@ -196,7 +196,7 @@ export default function ResellerPortal() {
   const addProductToOrder = (productId: string) => {
     const existing = selectedProducts.find(p => p.productId === productId);
     if (existing) {
-      setSelectedProducts(selectedProducts.map(p => 
+      setSelectedProducts(selectedProducts.map(p =>
         p.productId === productId ? { ...p, quantity: p.quantity + 1 } : p
       ));
     } else {
@@ -212,7 +212,7 @@ export default function ResellerPortal() {
     if (quantity <= 0) {
       removeProductFromOrder(productId);
     } else {
-      setSelectedProducts(selectedProducts.map(p => 
+      setSelectedProducts(selectedProducts.map(p =>
         p.productId === productId ? { ...p, quantity } : p
       ));
     }
@@ -309,9 +309,9 @@ export default function ResellerPortal() {
               <p className="text-xs text-muted-foreground capitalize">{reseller?.tier || 'silver'} Tier</p>
             </div>
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             className="w-full justify-start text-muted-foreground"
             onClick={handleSignOut}
             disabled={signOut.isPending}
@@ -605,51 +605,51 @@ export default function ResellerPortal() {
                                     </Badge>
                                   </div>
                                 </div>
-                              {selected && (
-                                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-                                  <div className="flex items-center gap-2">
+                                {selected && (
+                                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateProductQuantity(product.id, selected.quantity - 1);
+                                        }}
+                                      >
+                                        -
+                                      </Button>
+                                      <span className="w-8 text-center text-sm font-medium">
+                                        {selected.quantity}
+                                      </span>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-7 w-7"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateProductQuantity(product.id, selected.quantity + 1);
+                                        }}
+                                      >
+                                        +
+                                      </Button>
+                                    </div>
                                     <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-7 w-7"
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        updateProductQuantity(product.id, selected.quantity - 1);
+                                        removeProductFromOrder(product.id);
                                       }}
                                     >
-                                      -
-                                    </Button>
-                                    <span className="w-8 text-center text-sm font-medium">
-                                      {selected.quantity}
-                                    </span>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-7 w-7"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateProductQuantity(product.id, selected.quantity + 1);
-                                      }}
-                                    >
-                                      +
+                                      Remove
                                     </Button>
                                   </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-destructive"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      removeProductFromOrder(product.id);
-                                    }}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })
+                                )}
+                              </div>
+                            );
+                          })
                         )}
                       </div>
                     </CardContent>
@@ -665,18 +665,18 @@ export default function ResellerPortal() {
                     <CardContent className="space-y-4">
                       <div>
                         <Label>Customer Name *</Label>
-                        <Input 
-                          placeholder="Full name" 
-                          className="mt-1" 
+                        <Input
+                          placeholder="Full name"
+                          className="mt-1"
                           value={customerName}
                           onChange={(e) => setCustomerName(e.target.value)}
                         />
                       </div>
                       <div>
                         <Label>Phone Number *</Label>
-                        <Input 
-                          placeholder="0771234567" 
-                          className="mt-1" 
+                        <Input
+                          placeholder="0771234567"
+                          className="mt-1"
                           value={customerPhone}
                           onChange={(e) => setCustomerPhone(e.target.value)}
                         />
@@ -696,9 +696,9 @@ export default function ResellerPortal() {
                       </div>
                       <div>
                         <Label>Address *</Label>
-                        <Textarea 
-                          placeholder="Full delivery address" 
-                          className="mt-1" 
+                        <Textarea
+                          placeholder="Full delivery address"
+                          className="mt-1"
                           rows={3}
                           value={customerAddress}
                           onChange={(e) => setCustomerAddress(e.target.value)}
@@ -750,8 +750,8 @@ export default function ResellerPortal() {
                           </div>
                         </>
                       )}
-                      <Button 
-                        className="w-full mt-4" 
+                      <Button
+                        className="w-full mt-4"
                         disabled={selectedProducts.length === 0 || !customerName || !customerPhone || !customerDistrict || !customerAddress || placeOrder.isPending}
                         onClick={async () => {
                           try {
@@ -769,7 +769,7 @@ export default function ResellerPortal() {
                                 resellerPrice,
                               };
                             });
-                            
+
                             const result = await placeOrder.mutateAsync({
                               customerName,
                               customerPhone,
@@ -779,12 +779,12 @@ export default function ResellerPortal() {
                               items,
                               deliveryFee: 500,
                             });
-                            
+
                             toast({
                               title: 'Order placed successfully!',
                               description: `Your profit: Rs. ${result.profit.toLocaleString()}`,
                             });
-                            
+
                             // Reset form
                             setSelectedProducts([]);
                             setCustomerName('');
@@ -1082,6 +1082,12 @@ export default function ResellerPortal() {
                               )}
                             </div>
                           </div>
+                          {payout.status === 'rejected' && payout.rejection_reason && (
+                            <div className="mt-4 p-3 bg-red-50 border border-red-100 rounded-md text-sm text-red-700">
+                              <span className="font-semibold block mb-1">Reason for Rejection:</span>
+                              {payout.rejection_reason}
+                            </div>
+                          )}
                         </CardContent>
                       </Card>
                     );

@@ -27,7 +27,7 @@ export function useReseller() {
       if (!user) return null;
       
       const { data, error } = await supabase
-        .from('resellers')
+        .from('reseller_metrics_view' as any)
         .select('*')
         .eq('user_id', user.id)
         .maybeSingle();

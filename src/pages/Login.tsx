@@ -41,7 +41,7 @@ export default function Login() {
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [loginErrors, setLoginErrors] = useState<Partial<LoginFormData>>({});
   const [registerErrors, setRegisterErrors] = useState<FormErrors>({});
-  
+
   const navigate = useNavigate();
   const { toast } = useToast();
   const signIn = useSignIn();
@@ -51,7 +51,7 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoginErrors({});
-    
+
     const formData = new FormData(e.currentTarget);
     const data = {
       email: formData.get('login-email') as string,
@@ -71,7 +71,7 @@ export default function Login() {
 
     try {
       await signIn.mutateAsync({ email: data.email, password: data.password });
-      
+
       // Record successful login
       createLoginEntry.mutate({
         email: data.email,
@@ -104,7 +104,7 @@ export default function Login() {
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setRegisterErrors({});
-    
+
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get('register-name') as string,
@@ -127,13 +127,13 @@ export default function Login() {
     }
 
     try {
-      const result = await signUp.mutateAsync({ 
-        email: data.email, 
-        password: data.password, 
+      const result = await signUp.mutateAsync({
+        email: data.email,
+        password: data.password,
         name: data.name,
         phone: data.phone,
       });
-      
+
       // Record successful registration
       createLoginEntry.mutate({
         email: data.email,
@@ -286,10 +286,10 @@ export default function Login() {
                   </Link>
                 </div>
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  size="lg" 
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
                   disabled={signIn.isPending}
                 >
                   {signIn.isPending ? 'Signing in...' : 'Sign In'}
@@ -397,10 +397,10 @@ export default function Login() {
                   <p className="text-sm text-destructive">{registerErrors.terms}</p>
                 )}
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  size="lg" 
+                <Button
+                  type="submit"
+                  className="w-full"
+                  size="lg"
                   disabled={signUp.isPending}
                 >
                   {signUp.isPending ? 'Creating account...' : 'Create Account'}

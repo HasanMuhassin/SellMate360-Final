@@ -1,28 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-async function callContent(action: string, payload: Record<string, any> = {}) {
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/manage-content`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token || apiKey}`,
-        apikey: apiKey,
-      },
-      body: JSON.stringify({ action, ...payload }),
-    }
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Content API error ${res.status}`);
-  }
-  return res.json();
-}
+import { toast } from 'sonner';
 
 // ==================== CMS PAGES ====================
 export interface CMSPageRow {
@@ -45,31 +23,58 @@ export interface CMSPageRow {
 export function useCMSPages() {
   return useQuery<CMSPageRow[]>({
     queryKey: ["cms-pages"],
-    queryFn: () => callContent("list_pages"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cms_pages')
+        .select('*')
+        .order('menu_position', { ascending: true });
+      if (error) throw error;
+      return data as CMSPageRow[];
+    },
   });
 }
 
 export function useCreateCMSPage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<CMSPageRow>) => callContent("create_page", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cms-pages"] }),
+    mutationFn: async (p: Partial<CMSPageRow>) => {
+      const { data, error } = await supabase.from('cms_pages').insert(p).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cms-pages"] });
+      toast.success('Page created');
+    },
   });
 }
 
 export function useUpdateCMSPage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<CMSPageRow> & { id: string }) => callContent("update_page", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cms-pages"] }),
+    mutationFn: async ({ id, ...updates }: Partial<CMSPageRow> & { id: string }) => {
+      const { data, error } = await supabase.from('cms_pages').update(updates).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cms-pages"] });
+      toast.success('Page updated');
+    },
   });
 }
 
 export function useDeleteCMSPage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => callContent("delete_page", { id }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["cms-pages"] }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('cms_pages').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cms-pages"] });
+      toast.success('Page deleted');
+    },
   });
 }
 
@@ -94,31 +99,58 @@ export interface AnnouncementRow {
 export function useAnnouncements() {
   return useQuery<AnnouncementRow[]>({
     queryKey: ["announcements"],
-    queryFn: () => callContent("list_announcements"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('priority', { ascending: false });
+      if (error) throw error;
+      return data as AnnouncementRow[];
+    },
   });
 }
 
 export function useCreateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<AnnouncementRow>) => callContent("create_announcement", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+    mutationFn: async (p: Partial<AnnouncementRow>) => {
+      const { data, error } = await supabase.from('announcements').insert(p).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["announcements"] });
+      toast.success('Announcement created');
+    },
   });
 }
 
 export function useUpdateAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<AnnouncementRow> & { id: string }) => callContent("update_announcement", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+    mutationFn: async ({ id, ...updates }: Partial<AnnouncementRow> & { id: string }) => {
+      const { data, error } = await supabase.from('announcements').update(updates).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["announcements"] });
+      toast.success('Announcement updated');
+    },
   });
 }
 
 export function useDeleteAnnouncement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => callContent("delete_announcement", { id }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["announcements"] }),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('announcements').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["announcements"] });
+      toast.success('Announcement deleted');
+    },
   });
 }
 
@@ -142,22 +174,40 @@ export interface SEOSettingRow {
 export function useSEOSettings() {
   return useQuery<SEOSettingRow[]>({
     queryKey: ["seo-settings"],
-    queryFn: () => callContent("list_seo_settings"),
+    queryFn: async () => {
+      const { data, error } = await supabase.from('seo_settings').select('*');
+      if (error) throw error;
+      return data as SEOSettingRow[];
+    },
   });
 }
 
 export function useUpdateSEOSetting() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<SEOSettingRow> & { id: string }) => callContent("update_seo_setting", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["seo-settings"] }),
+    mutationFn: async ({ id, ...updates }: Partial<SEOSettingRow> & { id: string }) => {
+      const { data, error } = await supabase.from('seo_settings').update(updates).eq('id', id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["seo-settings"] });
+      toast.success('SEO updated');
+    },
   });
 }
 
 export function useCreateSEOSetting() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<SEOSettingRow>) => callContent("create_seo_setting", p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["seo-settings"] }),
+    mutationFn: async (p: Partial<SEOSettingRow>) => {
+      const { data, error } = await supabase.from('seo_settings').insert(p).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["seo-settings"] });
+      toast.success('SEO setting created');
+    },
   });
 }

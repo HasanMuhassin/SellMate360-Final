@@ -1,58 +1,28 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-
-async function callSecurity(action: string, payload: Record<string, unknown> = {}) {
-  const projectId = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-  const apiKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-  const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(
-    `https://${projectId}.supabase.co/functions/v1/manage-security`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.access_token || apiKey}`,
-        apikey: apiKey,
-      },
-      body: JSON.stringify({ 
-        action, 
-        user_agent: typeof window !== 'undefined' ? navigator.userAgent : 'Server',
-        ...payload 
-      }),
-    }
-  );
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Security API error ${res.status}`);
-  }
-  return res.json();
-}
+import { toast } from 'sonner';
 
 // ==================== TYPES ====================
 export interface AuditLogRow {
   id: string;
-  user_id: string;
-  user_name: string;
-  user_role: string;
+  user_id: string | null;
   action: string;
   resource: string;
   resource_id: string | null;
   details: any;
-  ip_address: string;
-  user_agent: string;
-  level: string;
+  ip_address: string | null;
+  user_agent: string | null;
+  level: 'info' | 'warning' | 'error' | 'critical';
   created_at: string;
 }
 
 export interface LoginHistoryRow {
   id: string;
-  email: string;
-  user_name: string | null;
-  success: boolean;
-  ip_address: string;
-  user_agent: string;
+  user_id: string;
+  ip_address: string | null;
+  user_agent: string | null;
   location: string | null;
-  failure_reason: string | null;
+  status: string;
   created_at: string;
 }
 
@@ -98,7 +68,18 @@ export function useAuditLogs() {
 export function useCreateAuditLog() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<AuditLogRow>) => callSecurity("create_audit_log", p),
+    mutationFn: async (log: Partial<AuditLogRow>) => {
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .insert({
+          ...log,
+          user_agent: typeof window !== 'undefined' ? navigator.userAgent : 'Server',
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["audit-logs"] }),
   });
 }
@@ -106,14 +87,30 @@ export function useCreateAuditLog() {
 export function useLoginHistory() {
   return useQuery<LoginHistoryRow[]>({
     queryKey: ["login-history"],
-    queryFn: () => callSecurity("list_login_history"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('login_history')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return data as LoginHistoryRow[];
+    },
   });
 }
 
 export function useCreateLoginEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<LoginHistoryRow>) => callSecurity("create_login_entry", p),
+    mutationFn: async (entry: Partial<LoginHistoryRow>) => {
+      const { data, error } = await supabase
+        .from('login_history')
+        .insert(entry)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["login-history"] }),
   });
 }
@@ -121,14 +118,30 @@ export function useCreateLoginEntry() {
 export function useRoleChanges() {
   return useQuery<RoleChangeRow[]>({
     queryKey: ["role-changes"],
-    queryFn: () => callSecurity("list_role_changes"),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('role_changes')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return data as RoleChangeRow[];
+    },
   });
 }
 
 export function useCreateRoleChange() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: Partial<RoleChangeRow>) => callSecurity("create_role_change", p),
+    mutationFn: async (change: Partial<RoleChangeRow>) => {
+      const { data, error } = await supabase
+        .from('role_changes')
+        .insert(change)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["role-changes"] }),
   });
 }
@@ -136,6 +149,32 @@ export function useCreateRoleChange() {
 export function useSecurityStats() {
   return useQuery<SecurityStats>({
     queryKey: ["security-stats"],
-    queryFn: () => callSecurity("security_stats"),
+    queryFn: async () => {
+      const now = new Date();
+      const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+      const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      const [
+        { count: totalLogins },
+        { count: failedLogins },
+        { count: criticalActions },
+        { count: roleChanges }
+      ] = await Promise.all([
+        supabase.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', last24h),
+        supabase.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', last24h).neq('status', 'success'),
+        supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('created_at', last7d).eq('level', 'critical'),
+        supabase.from('role_changes').select('*', { count: 'exact', head: true }).gte('created_at', last30d),
+      ]);
+
+      return {
+        totalLogins24h: totalLogins || 0,
+        failedLogins24h: failedLogins || 0,
+        suspiciousAttempts: (failedLogins || 0) > 10 ? 1 : 0,
+        activeUsers: 0, // Placeholder
+        criticalActions7d: criticalActions || 0,
+        roleChanges30d: roleChanges || 0,
+      };
+    },
   });
 }

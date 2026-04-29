@@ -9,7 +9,7 @@ export default function OrderConfirmation() {
   const whatsappMessage = encodeURIComponent(
     `Hi! I just placed an order. Order number: ${orderNumber}. I'd like to confirm my order details.`
   );
-  const whatsappUrl = `https://wa.me/+94771234567?text=${whatsappMessage}`;
+  const whatsappUrl = `https://wa.me/+94754864688?text=${whatsappMessage}`;
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center py-16">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Upload,
   Search,
@@ -14,10 +14,9 @@ import {
   Folder,
   X,
   Check,
-  Info,
-  HardDrive,
   Images,
-  Tag,
+  HardDrive,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,57 +55,80 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StatCard from '@/components/admin/StatCard';
-import { mockMediaItems, mockFolders, formatFileSize } from '@/data/mediaMockData';
-import type { MediaItem, MediaFolder } from '@/data/mediaMockData';
+import { 
+  useMediaLibrary, 
+  useMediaFolders, 
+  useCreateFolder, 
+  useUploadMedia, 
+  useDeleteMedia, 
+  useUpdateMedia,
+  MediaItem 
+} from '@/hooks/useMedia';
 import { toast } from 'sonner';
 
 export default function MediaLibrary() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchTerm, setSearchTerm] = useState('');
-  const [folderFilter, setFolderFilter] = useState<string>('all');
+  const [selectedFolderId, setSelectedFolderId] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [detailsItem, setDetailsItem] = useState<MediaItem | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
   const [editAltText, setEditAltText] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredItems = mockMediaItems.filter((item) => {
+  const { data: folders = [] } = useMediaFolders();
+  const { data: mediaItems = [], isLoading } = useMediaLibrary(selectedFolderId === 'all' ? null : selectedFolderId);
+  
+  const createFolder = useCreateFolder();
+  const uploadMedia = useUploadMedia();
+  const deleteMedia = useDeleteMedia();
+  const updateMedia = useUpdateMedia();
+
+  const filteredItems = mediaItems.filter((item) => {
     const matchesSearch =
       item.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.altText?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.alt_text?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.tags.some((tag) => tag.toLowerCase().includes(searchTerm.toLowerCase()));
-    const matchesFolder = folderFilter === 'all' || item.folder === folderFilter;
+    
     const matchesType =
       typeFilter === 'all' ||
-      (typeFilter === 'image' && item.mimeType.startsWith('image/')) ||
-      (typeFilter === 'video' && item.mimeType.startsWith('video/')) ||
-      (typeFilter === 'document' && !item.mimeType.startsWith('image/') && !item.mimeType.startsWith('video/'));
-    return matchesSearch && matchesFolder && matchesType;
+      (typeFilter === 'image' && item.mime_type.startsWith('image/')) ||
+      (typeFilter === 'video' && item.mime_type.startsWith('video/')) ||
+      (typeFilter === 'document' && !item.mime_type.startsWith('image/') && !item.mime_type.startsWith('video/'));
+    
+    return matchesSearch && matchesType;
   });
 
   const stats = {
-    totalFiles: mockMediaItems.length,
-    totalSize: mockMediaItems.reduce((acc, item) => acc + item.size, 0),
-    folders: mockFolders.length,
-    images: mockMediaItems.filter((item) => item.mimeType.startsWith('image/')).length,
+    totalFiles: mediaItems.length,
+    totalSize: mediaItems.reduce((acc, item) => acc + item.size, 0),
+    folders: folders.length,
+    images: mediaItems.filter((item) => item.mime_type.startsWith('image/')).length,
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   const toggleSelectAll = () => {
-    if (selectedItems.length === filteredItems.length) {
-      setSelectedItems([]);
+    if (selectedItemIds.length === filteredItems.length) {
+      setSelectedItemIds([]);
     } else {
-      setSelectedItems(filteredItems.map((item) => item.id));
+      setSelectedItemIds(filteredItems.map((item) => item.id));
     }
   };
 
   const toggleSelect = (itemId: string) => {
-    setSelectedItems((prev) =>
+    setSelectedItemIds((prev) =>
       prev.includes(itemId) ? prev.filter((id) => id !== itemId) : [...prev, itemId]
     );
   };
@@ -117,28 +139,46 @@ export default function MediaLibrary() {
   };
 
   const handleDeleteConfirm = () => {
-    toast.success(`${selectedItems.length > 0 ? selectedItems.length : 1} file(s) deleted`);
-    setSelectedItems([]);
-    setDeleteDialogOpen(false);
-    setDetailsItem(null);
+    const itemsToDelete = mediaItems.filter(item => selectedItemIds.includes(item.id));
+    deleteMedia.mutate(itemsToDelete, {
+      onSuccess: () => {
+        setSelectedItemIds([]);
+        setDeleteDialogOpen(false);
+        setDetailsItem(null);
+      }
+    });
   };
 
   const handleCreateFolder = () => {
     if (newFolderName.trim()) {
-      toast.success(`Folder "${newFolderName}" created`);
-      setNewFolderName('');
-      setFolderDialogOpen(false);
+      createFolder.mutate({ name: newFolderName }, {
+        onSuccess: () => {
+          setNewFolderName('');
+          setFolderDialogOpen(false);
+        }
+      });
     }
   };
 
-  const handleUpload = () => {
-    toast.success('Files uploaded successfully');
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      await uploadMedia.mutateAsync({ 
+        file, 
+        folderId: selectedFolderId === 'all' ? null : selectedFolderId 
+      });
+    }
+    
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setUploadDialogOpen(false);
   };
 
   const handleSaveAltText = () => {
     if (detailsItem) {
-      toast.success('Alt text updated');
+      updateMedia.mutate({ id: detailsItem.id, alt_text: editAltText });
     }
   };
 
@@ -211,14 +251,14 @@ export default function MediaLibrary() {
                 className="pl-9"
               />
             </div>
-            <Select value={folderFilter} onValueChange={setFolderFilter}>
+            <Select value={selectedFolderId} onValueChange={setSelectedFolderId}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Folder" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Folders</SelectItem>
-                {mockFolders.map((folder) => (
-                  <SelectItem key={folder.id} value={folder.slug}>
+                {folders.map((folder) => (
+                  <SelectItem key={folder.id} value={folder.id}>
                     {folder.name}
                   </SelectItem>
                 ))}
@@ -258,24 +298,17 @@ export default function MediaLibrary() {
       </Card>
 
       {/* Bulk Actions */}
-      {selectedItems.length > 0 && (
+      {selectedItemIds.length > 0 && (
         <Card className="border-primary bg-primary/5">
           <CardContent className="py-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{selectedItems.length} file(s) selected</span>
+              <span className="text-sm font-medium">{selectedItemIds.length} file(s) selected</span>
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
-                <Button variant="outline" size="sm">
-                  <Folder className="mr-2 h-4 w-4" />
-                  Move to Folder
-                </Button>
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={() => setDeleteDialogOpen(true)}
+                  disabled={deleteMedia.isPending}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
@@ -290,33 +323,34 @@ export default function MediaLibrary() {
       <div className="flex gap-6">
         {/* Media Grid/List */}
         <div className="flex-1">
-          {viewMode === 'grid' ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : viewMode === 'grid' ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
                   className={`group relative rounded-lg border bg-card overflow-hidden cursor-pointer transition-all hover:ring-2 hover:ring-primary/50 ${
-                    selectedItems.includes(item.id) ? 'ring-2 ring-primary' : ''
+                    selectedItemIds.includes(item.id) ? 'ring-2 ring-primary' : ''
                   }`}
-                  onClick={() => setDetailsItem(item)}
+                  onClick={() => {
+                    setDetailsItem(item);
+                    setEditAltText(item.alt_text || '');
+                  }}
                 >
                   <div className="aspect-square bg-muted">
                     <img
-                      src={item.thumbnailUrl}
-                      alt={item.altText || item.filename}
+                      src={item.url}
+                      alt={item.alt_text || item.filename}
                       className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/placeholder.svg';
-                      }}
                     />
                   </div>
                   <div className="absolute top-2 left-2">
                     <Checkbox
-                      checked={selectedItems.includes(item.id)}
-                      onCheckedChange={(e) => {
-                        e && e.valueOf();
-                        toggleSelect(item.id);
-                      }}
+                      checked={selectedItemIds.includes(item.id)}
+                      onCheckedChange={() => toggleSelect(item.id)}
                       onClick={(e) => e.stopPropagation()}
                       className="bg-background/80 backdrop-blur"
                     />
@@ -336,15 +370,13 @@ export default function MediaLibrary() {
                     <TableRow>
                       <TableHead className="w-[50px]">
                         <Checkbox
-                          checked={selectedItems.length === filteredItems.length && filteredItems.length > 0}
+                          checked={selectedItemIds.length === filteredItems.length && filteredItems.length > 0}
                           onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
                       <TableHead className="w-[60px]">Preview</TableHead>
                       <TableHead>Filename</TableHead>
-                      <TableHead>Folder</TableHead>
                       <TableHead>Size</TableHead>
-                      <TableHead>Dimensions</TableHead>
                       <TableHead>Uploaded</TableHead>
                       <TableHead className="w-[80px]">Actions</TableHead>
                     </TableRow>
@@ -354,41 +386,33 @@ export default function MediaLibrary() {
                       <TableRow
                         key={item.id}
                         className="cursor-pointer"
-                        onClick={() => setDetailsItem(item)}
+                        onClick={() => {
+                          setDetailsItem(item);
+                          setEditAltText(item.alt_text || '');
+                        }}
                       >
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <Checkbox
-                            checked={selectedItems.includes(item.id)}
+                            checked={selectedItemIds.includes(item.id)}
                             onCheckedChange={() => toggleSelect(item.id)}
                           />
                         </TableCell>
                         <TableCell>
                           <div className="h-10 w-10 rounded border bg-muted overflow-hidden">
                             <img
-                              src={item.thumbnailUrl}
-                              alt={item.altText || item.filename}
+                              src={item.url}
+                              alt={item.alt_text || item.filename}
                               className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/placeholder.svg';
-                              }}
                             />
                           </div>
                         </TableCell>
                         <TableCell>
                           <p className="font-medium">{item.filename}</p>
-                          <p className="text-xs text-muted-foreground">{item.mimeType}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="capitalize">
-                            {item.folder}
-                          </Badge>
+                          <p className="text-xs text-muted-foreground">{item.mime_type}</p>
                         </TableCell>
                         <TableCell>{formatFileSize(item.size)}</TableCell>
-                        <TableCell>
-                          {item.width && item.height ? `${item.width}×${item.height}` : '—'}
-                        </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {formatDate(item.createdAt)}
+                          {formatDate(item.created_at)}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <DropdownMenu>
@@ -402,11 +426,10 @@ export default function MediaLibrary() {
                                 <Copy className="mr-2 h-4 w-4" />
                                 Copy URL
                               </DropdownMenuItem>
-                              <DropdownMenuItem>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setDetailsItem(item)}>
+                              <DropdownMenuItem onClick={() => {
+                                setDetailsItem(item);
+                                setEditAltText(item.alt_text || '');
+                              }}>
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit Details
                               </DropdownMenuItem>
@@ -414,7 +437,7 @@ export default function MediaLibrary() {
                               <DropdownMenuItem
                                 className="text-destructive"
                                 onClick={() => {
-                                  setSelectedItems([item.id]);
+                                  setSelectedItemIds([item.id]);
                                   setDeleteDialogOpen(true);
                                 }}
                               >
@@ -432,7 +455,7 @@ export default function MediaLibrary() {
             </Card>
           )}
 
-          {filteredItems.length === 0 && (
+          {!isLoading && filteredItems.length === 0 && (
             <Card>
               <CardContent className="py-12 text-center">
                 <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
@@ -457,11 +480,8 @@ export default function MediaLibrary() {
               <div className="aspect-video rounded-lg border bg-muted overflow-hidden">
                 <img
                   src={detailsItem.url}
-                  alt={detailsItem.altText || detailsItem.filename}
+                  alt={detailsItem.alt_text || detailsItem.filename}
                   className="w-full h-full object-contain"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/placeholder.svg';
-                  }}
                 />
               </div>
 
@@ -472,7 +492,7 @@ export default function MediaLibrary() {
                 </div>
                 <div>
                   <Label className="text-xs text-muted-foreground">Original Name</Label>
-                  <p className="text-sm">{detailsItem.originalFilename}</p>
+                  <p className="text-sm">{detailsItem.original_filename}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -480,37 +500,14 @@ export default function MediaLibrary() {
                     <p className="text-sm">{formatFileSize(detailsItem.size)}</p>
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Dimensions</Label>
-                    <p className="text-sm">
-                      {detailsItem.width && detailsItem.height
-                        ? `${detailsItem.width}×${detailsItem.height}`
-                        : '—'}
-                    </p>
+                    <Label className="text-xs text-muted-foreground">Type</Label>
+                    <p className="text-sm">{detailsItem.mime_type}</p>
                   </div>
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Type</Label>
-                  <p className="text-sm">{detailsItem.mimeType}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Folder</Label>
-                  <p className="text-sm capitalize">{detailsItem.folder}</p>
-                </div>
-                <div>
                   <Label className="text-xs text-muted-foreground">Uploaded</Label>
-                  <p className="text-sm">{formatDate(detailsItem.createdAt)}</p>
-                  <p className="text-xs text-muted-foreground">by {detailsItem.uploadedBy}</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Tags</Label>
-                <div className="flex flex-wrap gap-1">
-                  {detailsItem.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
+                  <p className="text-sm">{formatDate(detailsItem.created_at)}</p>
+                  <p className="text-xs text-muted-foreground">by {detailsItem.uploaded_by}</p>
                 </div>
               </div>
 
@@ -518,13 +515,13 @@ export default function MediaLibrary() {
                 <Label htmlFor="altText">Alt Text</Label>
                 <Textarea
                   id="altText"
-                  value={editAltText || detailsItem.altText || ''}
+                  value={editAltText}
                   onChange={(e) => setEditAltText(e.target.value)}
                   placeholder="Describe this image..."
                   rows={2}
                 />
-                <Button size="sm" className="w-full" onClick={handleSaveAltText}>
-                  <Check className="mr-2 h-4 w-4" />
+                <Button size="sm" className="w-full" onClick={handleSaveAltText} disabled={updateMedia.isPending}>
+                  {updateMedia.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
                   Save Alt Text
                 </Button>
               </div>
@@ -544,20 +541,16 @@ export default function MediaLibrary() {
               </div>
 
               <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1">
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
                 <Button
                   variant="destructive"
-                  className="flex-1"
+                  className="w-full"
                   onClick={() => {
-                    setSelectedItems([detailsItem.id]);
+                    setSelectedItemIds([detailsItem.id]);
                     setDeleteDialogOpen(true);
                   }}
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
+                  Delete File
                 </Button>
               </div>
             </CardContent>
@@ -575,38 +568,35 @@ export default function MediaLibrary() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-              <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
-              <p className="text-sm font-medium mb-1">Drop files here or click to upload</p>
-              <p className="text-xs text-muted-foreground">PNG, JPG, GIF, WebP up to 10MB</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Upload to Folder</Label>
-              <Select defaultValue="products">
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockFolders.map((folder) => (
-                    <SelectItem key={folder.id} value={folder.slug}>
-                      {folder.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Tags (comma separated)</Label>
-              <Input placeholder="product, featured, new" />
+            <div 
+              className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors cursor-pointer relative"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploadMedia.isPending ? (
+                <div className="flex flex-col items-center">
+                  <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
+                  <p className="text-sm font-medium">Uploading...</p>
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-10 w-10 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-sm font-medium mb-1">Click to upload files</p>
+                  <p className="text-xs text-muted-foreground">PNG, JPG, GIF, WebP up to 10MB</p>
+                </>
+              )}
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                multiple 
+                onChange={handleFileChange}
+                accept="image/*,video/*,.pdf,.doc,.docx"
+              />
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setUploadDialogOpen(false)}>
               Cancel
-            </Button>
-            <Button onClick={handleUpload}>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -631,29 +621,13 @@ export default function MediaLibrary() {
                 placeholder="e.g., Product Thumbnails"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Parent Folder (optional)</Label>
-              <Select>
-                <SelectTrigger>
-                  <SelectValue placeholder="Root" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="root">Root (No parent)</SelectItem>
-                  {mockFolders.map((folder) => (
-                    <SelectItem key={folder.id} value={folder.id}>
-                      {folder.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFolderDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCreateFolder}>
-              <FolderPlus className="mr-2 h-4 w-4" />
+            <Button onClick={handleCreateFolder} disabled={createFolder.isPending}>
+              {createFolder.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FolderPlus className="mr-2 h-4 w-4" />}
               Create Folder
             </Button>
           </DialogFooter>
@@ -666,7 +640,7 @@ export default function MediaLibrary() {
           <DialogHeader>
             <DialogTitle>Delete Files</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {selectedItems.length} file(s)? This action cannot be
+              Are you sure you want to delete {selectedItemIds.length} file(s)? This action cannot be
               undone and may affect products using these images.
             </DialogDescription>
           </DialogHeader>
@@ -674,8 +648,8 @@ export default function MediaLibrary() {
             <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteConfirm}>
-              Delete
+            <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleteMedia.isPending}>
+              {deleteMedia.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
             </Button>
           </DialogFooter>
         </DialogContent>

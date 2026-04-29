@@ -110,7 +110,7 @@ export default function ProductDetail() {
   const whatsappMessage = encodeURIComponent(
     `Hi! I'm interested in: ${product.name} (${formatPrice(product.price)})`
   );
-  const whatsappUrl = `https://wa.me/+94771234567?text=${whatsappMessage}`;
+  const whatsappUrl = `https://wa.me/+94754864688?text=${whatsappMessage}`;
 
   const stock = product.stock || 0;
   const isOutOfStock = stock <= 0;

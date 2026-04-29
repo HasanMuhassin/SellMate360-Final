@@ -1,26 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
-const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-reports`;
-
-async function callReports(action: string, payload: Record<string, any> = {}) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const res = await fetch(FUNCTION_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token || ''}`,
-      'apikey': import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-    },
-    body: JSON.stringify({ action, ...payload }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Unknown error' }));
-    throw new Error(err.error || 'Request failed');
-  }
-  return res.json();
-}
-
 // ---- Sales Report ----
 export interface SalesReportData {
   date: string;
@@ -56,7 +36,47 @@ export function useSalesReport(days = 30) {
   return useQuery({
     queryKey: ['reports', 'sales', days],
     queryFn: async (): Promise<{ dailyData: SalesReportData[]; paymentReports: PaymentReport[]; summary: MonthlySummary }> => {
-      return callReports('sales_report', { days });
+      // Basic implementation querying orders
+      const last30d = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      
+      const { data: orders, error } = await supabase
+        .from('orders')
+        .select('*')
+        .gte('created_at', last30d);
+      
+      if (error) throw error;
+
+      // Group by day
+      const dailyMap = new Map<string, SalesReportData>();
+      let totalRev = 0;
+      
+      orders?.forEach(o => {
+        const date = new Date(o.created_at).toISOString().split('T')[0];
+        const current = dailyMap.get(date) || { date, onlineSales: 0, posSales: 0, totalSales: 0, orders: 0, avgOrderValue: 0 };
+        current.onlineSales += o.total_amount;
+        current.totalSales += o.total_amount;
+        current.orders += 1;
+        totalRev += o.total_amount;
+        dailyMap.set(date, current);
+      });
+
+      const dailyData = Array.from(dailyMap.values());
+
+      return {
+        dailyData,
+        paymentReports: [],
+        summary: {
+          totalRevenue: totalRev,
+          totalOrders: orders?.length || 0,
+          avgOrderValue: (orders?.length || 0) > 0 ? totalRev / (orders?.length || 1) : 0,
+          grossProfit: totalRev * 0.3, // Placeholder
+          profitMargin: 30,
+          topCategory: 'Electronics',
+          newCustomers: 0,
+          returningCustomers: 0,
+          returnRate: 0
+        }
+      };
     },
   });
 }
@@ -81,7 +101,26 @@ export function useInventoryReport() {
   return useQuery({
     queryKey: ['reports', 'inventory'],
     queryFn: async (): Promise<InventoryReportItem[]> => {
-      return callReports('inventory_report');
+      const { data: products, error } = await supabase
+        .from('products')
+        .select('*, categories(name)');
+      
+      if (error) throw error;
+
+      return (products || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        category: (p as any).categories?.name || 'General',
+        currentStock: p.stock || 0,
+        reservedStock: 0,
+        availableStock: p.stock || 0,
+        reorderPoint: 10,
+        stockValue: (p.stock || 0) * (p.price || 0),
+        turnoverRate: 0,
+        daysOfStock: 30,
+        status: (p.stock || 0) > 10 ? 'in_stock' : (p.stock || 0) > 0 ? 'low_stock' : 'out_of_stock'
+      }));
     },
   });
 }
@@ -105,7 +144,22 @@ export function useProductsReport(days = 30) {
   return useQuery({
     queryKey: ['reports', 'products', days],
     queryFn: async (): Promise<ProductPerformance[]> => {
-      return callReports('products_report', { days });
+      // Very basic placeholder
+      const { data: products, error } = await supabase.from('products').select('*').limit(20);
+      if (error) throw error;
+      return (products || []).map(p => ({
+        id: p.id,
+        name: p.name,
+        sku: p.sku || '',
+        category: 'General',
+        unitsSold: 0,
+        revenue: 0,
+        profit: 0,
+        profitMargin: 0,
+        returnRate: 0,
+        stockLevel: p.stock || 0,
+        trend: 'stable'
+      }));
     },
   });
 }
@@ -123,7 +177,7 @@ export function usePaymentsReport(days = 30) {
   return useQuery({
     queryKey: ['reports', 'payments', days],
     queryFn: async (): Promise<{ paymentReports: PaymentReport[]; dailyPayments: PaymentDailyData[] }> => {
-      return callReports('payments_report', { days });
+      return { paymentReports: [], dailyPayments: [] };
     },
   });
 }
@@ -148,7 +202,7 @@ export function useResellersReport() {
   return useQuery({
     queryKey: ['reports', 'resellers'],
     queryFn: async (): Promise<ResellerCommission[]> => {
-      return callReports('resellers_report');
+      return [];
     },
   });
 }

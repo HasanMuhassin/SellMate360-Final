@@ -31,15 +31,15 @@ const ContactUs = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
+
     // Simulate form submission
     await new Promise(resolve => setTimeout(resolve, 1500));
-    
+
     toast({
       title: 'Message Sent!',
       description: 'We\'ll get back to you within 24 hours.',
     });
-    
+
     setFormData({ name: '', email: '', phone: '', subject: '', message: '' });
     setIsSubmitting(false);
   };
@@ -79,7 +79,7 @@ const ContactUs = () => {
               className="space-y-6"
             >
               <h2 className="text-2xl font-bold mb-6">Get in Touch</h2>
-              
+
               {contactInfo.map((info, index) => (
                 <Card key={info.title} className="hover:shadow-md transition-shadow">
                   <CardContent className="flex items-start gap-4 p-4">
@@ -104,7 +104,7 @@ const ContactUs = () => {
                   <p className="text-sm text-muted-foreground mb-4">
                     For faster support, reach us on WhatsApp. We typically respond within minutes!
                   </p>
-                  <Button 
+                  <Button
                     className="w-full bg-success hover:bg-success/90"
                     onClick={() => window.open('https://wa.me/94112345678', '_blank')}
                   >
