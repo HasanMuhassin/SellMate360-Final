@@ -45,6 +45,8 @@ export default function NewSale() {
   const [splitCard, setSplitCard] = useState('');
   const [openingBalance, setOpeningBalance] = useState('10000');
   const [receiptNumber, setReceiptNumber] = useState('');
+  const [skuMode, setSkuMode] = useState(false);
+  const [skuInput, setSkuInput] = useState('');
 
   // Live data hooks
   const { data: products = [], isLoading: productsLoading } = useProducts();
@@ -126,6 +128,58 @@ export default function NewSale() {
     await openShift.mutateAsync({ openingBalance: parseFloat(openingBalance) || 10000 });
     setShiftDialog(false);
   };
+
+  const handleSkuScan = () => {
+    if (!skuInput.trim()) return;
+    const sku = skuInput.trim().toUpperCase();
+    const match = products.filter(p => p.status === 'active').find(p => p.sku?.toUpperCase() === sku);
+    if (match) {
+      if (match.stock === 0) toast.error(`${match.name} is out of stock`);
+      else { addToCart(match); toast.success(`Added: ${match.name}`); }
+    } else {
+      toast.error(`No product found with SKU: ${sku}`);
+    }
+    setSkuInput('');
+  };
+
+  const printReceipt = () => {
+    const win = window.open('', '_blank', 'width=380,height=650');
+    if (!win) { toast.error('Please allow popups to print receipts'); return; }
+    const itemRows = cart.map(item =>
+      `<tr><td>${item.name}</td><td style="text-align:center">${item.quantity}</td><td style="text-align:right">Rs.${(item.price * item.quantity).toLocaleString()}</td></tr>`
+    ).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Receipt #${receiptNumber}</title>
+      <style>
+        body{font-family:monospace;font-size:13px;width:300px;margin:0 auto;padding:10px;}
+        h2{text-align:center;margin:0 0 2px;font-size:15px;}
+        p{text-align:center;margin:1px 0;font-size:11px;}
+        hr{border:none;border-top:1px dashed #000;margin:6px 0;}
+        table{width:100%;border-collapse:collapse;}
+        th{text-align:left;font-size:11px;border-bottom:1px solid #000;padding:2px 0;}
+        td{padding:2px 0;font-size:12px;vertical-align:top;}
+        .row{display:flex;justify-content:space-between;font-size:12px;margin:2px 0;}
+        .total{font-size:14px;font-weight:bold;}
+        .footer{text-align:center;font-size:11px;margin-top:10px;}
+        @media print{@page{margin:0;size:80mm auto;}}
+      </style></head><body>
+      <h2>SellMate360</h2>
+      <p>Point of Sale Receipt</p>
+      <p>${new Date().toLocaleString()}</p>
+      <p>Receipt #: ${receiptNumber}</p>
+      <hr/>
+      <table><thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th></tr></thead>
+      <tbody>${itemRows}</tbody></table>
+      <hr/>
+      ${discountValue > 0 ? `<div class="row"><span>Subtotal:</span><span>Rs.${subtotal.toLocaleString()}</span></div><div class="row"><span>Discount:</span><span>-Rs.${discountValue.toLocaleString()}</span></div>` : ''}
+      <div class="row total"><span>TOTAL:</span><span>Rs.${total.toLocaleString()}</span></div>
+      <div class="row"><span>Payment:</span><span>${paymentMethod.toUpperCase()}</span></div>
+      ${paymentMethod === 'cash' && change > 0 ? `<div class="row"><span>Change:</span><span>Rs.${change.toLocaleString()}</span></div>` : ''}
+      <div class="footer"><hr/>Thank you for your purchase!<br/>Please come again 😊</div>
+      <script>window.onload=function(){window.print();window.close();}<\/script>
+    </body></html>`);
+    win.document.close();
+  };
+
 
   const processPayment = async () => {
     if (!activeShift) {
@@ -240,8 +294,28 @@ export default function NewSale() {
               className="pl-9"
             />
           </div>
-          <Button variant="outline" size="icon"><Barcode className="h-4 w-4" /></Button>
+          <Button
+            variant={skuMode ? 'default' : 'outline'}
+            size="icon"
+            title="Barcode / SKU Lookup"
+            onClick={() => { setSkuMode(m => !m); setSkuInput(''); }}
+          >
+            <Barcode className="h-4 w-4" />
+          </Button>
         </div>
+        {skuMode && (
+          <div className="flex gap-2 px-1">
+            <Input
+              autoFocus
+              placeholder="Scan or type SKU and press Enter..."
+              value={skuInput}
+              onChange={e => setSkuInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleSkuScan(); } }}
+              className="flex-1"
+            />
+            <Button size="sm" onClick={handleSkuScan}>Add</Button>
+          </div>
+        )}
 
         {/* Products Grid */}
         <ScrollArea className="flex-1">
@@ -538,7 +612,7 @@ export default function NewSale() {
             </div>
             <div className="flex gap-2">
               <Button variant="outline" className="flex-1" onClick={completeTransaction}>New Sale</Button>
-              <Button className="flex-1" onClick={() => { toast.success('Receipt printed!'); completeTransaction(); }}>
+              <Button className="flex-1" onClick={() => { printReceipt(); completeTransaction(); }}>
                 <Receipt className="mr-2 h-4 w-4" />Print
               </Button>
             </div>

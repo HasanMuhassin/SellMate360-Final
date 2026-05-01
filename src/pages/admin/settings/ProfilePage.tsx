@@ -24,23 +24,48 @@ import {
 } from '@/components/ui/input-otp';
 import { toast } from 'sonner';
 import { useAdminAuth } from '@/context/AdminAuthContext';
+import { useAdminProfile } from '@/hooks/useAdminProfile';
+import { useEffect, useRef } from 'react';
 
 export default function ProfilePage() {
   const { user } = useAdminAuth();
-  const [isSaving, setIsSaving] = useState(false);
+  const { 
+    profile: dbProfile, 
+    isLoading, 
+    updateProfile, 
+    isUpdatingProfile, 
+    uploadAvatar, 
+    isUploadingAvatar, 
+    updatePassword, 
+    isUpdatingPassword 
+  } = useAdminProfile();
+  
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [is2FADialogOpen, setIs2FADialogOpen] = useState(false);
   const [otpValue, setOtpValue] = useState('');
   const [copied, setCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile form state
   const [profile, setProfile] = useState({
-    name: user?.name || 'Super Admin',
-    email: user?.email || 'admin@sellmate360.lk',
-    phone: '+94 77 123 4567',
+    name: user?.name || '',
+    email: user?.email || '',
+    phone: '',
     avatar: user?.avatar || 'https://api.dicebear.com/7.x/avataaars/svg?seed=admin',
   });
+
+  // Sync DB profile to local state once loaded
+  useEffect(() => {
+    if (dbProfile) {
+      setProfile(prev => ({
+        ...prev,
+        name: dbProfile.name || prev.name,
+        phone: dbProfile.phone || prev.phone,
+        avatar: dbProfile.avatar_url || prev.avatar,
+      }));
+    }
+  }, [dbProfile]);
 
   // Password form state
   const [passwords, setPasswords] = useState({
@@ -54,10 +79,22 @@ export default function ProfilePage() {
   const mockSecretKey = 'JBSWY3DPEHPK3PXP';
 
   const handleSaveProfile = async () => {
-    setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    toast.success('Profile updated successfully');
+    updateProfile({
+      name: profile.name,
+      phone: profile.phone,
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('File size must be less than 2MB');
+      return;
+    }
+    
+    uploadAvatar(file);
   };
 
   const handleChangePassword = async () => {
@@ -69,11 +106,12 @@ export default function ProfilePage() {
       toast.error('Password must be at least 8 characters');
       return;
     }
-    setIsSaving(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsSaving(false);
-    setPasswords({ current: '', new: '', confirm: '' });
-    toast.success('Password changed successfully');
+    
+    updatePassword(passwords.new, {
+      onSuccess: () => {
+        setPasswords({ current: '', new: '', confirm: '' });
+      }
+    });
   };
 
   const handleEnable2FA = () => {
@@ -125,13 +163,25 @@ export default function ProfilePage() {
                 <Avatar className="h-24 w-24">
                   <AvatarImage src={profile.avatar} alt={profile.name} />
                   <AvatarFallback className="text-2xl">
-                    {profile.name.split(' ').map(n => n[0]).join('')}
+                    {profile.name ? profile.name.split(' ').map(n => n[0]).join('').substring(0, 2) : 'A'}
                   </AvatarFallback>
                 </Avatar>
                 <div className="space-y-2">
-                  <Button variant="outline" size="sm">
+                  <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    className="hidden" 
+                    accept="image/jpeg,image/png,image/gif"
+                    onChange={handleFileChange}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingAvatar}
+                  >
                     <Upload className="mr-2 h-4 w-4" />
-                    Upload Photo
+                    {isUploadingAvatar ? 'Uploading...' : 'Upload Photo'}
                   </Button>
                   <p className="text-xs text-muted-foreground">
                     JPG, PNG or GIF. Max size 2MB.
@@ -157,7 +207,8 @@ export default function ProfilePage() {
                     id="email"
                     type="email"
                     value={profile.email}
-                    onChange={e => setProfile({ ...profile, email: e.target.value })}
+                    disabled
+                    title="Email cannot be changed directly"
                   />
                 </div>
                 <div className="space-y-2">
@@ -179,9 +230,9 @@ export default function ProfilePage() {
               </div>
 
               <div className="flex justify-end">
-                <Button onClick={handleSaveProfile} disabled={isSaving}>
+                <Button onClick={handleSaveProfile} disabled={isUpdatingProfile || isLoading}>
                   <Save className="mr-2 h-4 w-4" />
-                  {isSaving ? 'Saving...' : 'Save Changes'}
+                  {isUpdatingProfile ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
             </CardContent>
@@ -269,9 +320,9 @@ export default function ProfilePage() {
               <div className="flex justify-end">
                 <Button
                   onClick={handleChangePassword}
-                  disabled={!passwords.current || !passwords.new || !passwords.confirm}
+                  disabled={!passwords.new || !passwords.confirm || isUpdatingPassword}
                 >
-                  Update Password
+                  {isUpdatingPassword ? 'Updating...' : 'Update Password'}
                 </Button>
               </div>
             </CardContent>

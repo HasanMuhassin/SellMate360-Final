@@ -20,6 +20,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useStockTransfers, useStockTransferMutations, useBranches } from '@/hooks/useInventory';
+import { useProducts } from '@/hooks/useProducts';
 import { format } from 'date-fns';
 
 export default function StockTransfers() {
@@ -29,10 +30,62 @@ export default function StockTransfers() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [selectedTransfer, setSelectedTransfer] = useState<any>(null);
   const [formData, setFormData] = useState({ from_branch_name: '', to_branch_name: '', notes: '' });
+  const [transferItems, setTransferItems] = useState<{ product_id: string; product_name: string; sku: string; quantity: number }[]>([]);
+  const [itemProductId, setItemProductId] = useState('none');
+  const [itemQty, setItemQty] = useState(1);
+  const [itemSearch, setItemSearch] = useState('');
 
   const { data: transfers = [], isLoading } = useStockTransfers();
   const { createTransfer, updateTransferStatus } = useStockTransferMutations();
   const { data: branches = [] } = useBranches();
+  const { data: allProducts = [] } = useProducts({ status: 'active' });
+
+  const filteredProductOptions = allProducts.filter(p =>
+    p.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+    (p.sku || '').toLowerCase().includes(itemSearch.toLowerCase())
+  );
+
+  const addTransferItem = () => {
+    if (itemProductId === 'none') return;
+    const product = allProducts.find(p => p.id === itemProductId);
+    if (!product) return;
+    const existing = transferItems.find(i => i.product_id === itemProductId);
+    if (existing) {
+      setTransferItems(transferItems.map(i =>
+        i.product_id === itemProductId ? { ...i, quantity: i.quantity + itemQty } : i
+      ));
+    } else {
+      setTransferItems([...transferItems, {
+        product_id: product.id,
+        product_name: product.name,
+        sku: product.sku || '',
+        quantity: itemQty,
+      }]);
+    }
+    setItemProductId('none');
+    setItemQty(1);
+    setItemSearch('');
+  };
+
+  const removeTransferItem = (productId: string) => {
+    setTransferItems(transferItems.filter(i => i.product_id !== productId));
+  };
+
+  const handleSave = () => {
+    if (!formData.from_branch_name || !formData.to_branch_name) return;
+    createTransfer.mutate({
+      from_branch_name: formData.from_branch_name,
+      to_branch_name: formData.to_branch_name,
+      items: transferItems,
+      notes: formData.notes,
+    }, {
+      onSuccess: () => {
+        setAddDialogOpen(false);
+        setTransferItems([]);
+        setFormData({ from_branch_name: '', to_branch_name: '', notes: '' });
+      }
+    });
+  };
 
   const filteredTransfers = transfers.filter((t: any) => {
     const matchesSearch =
@@ -59,15 +112,6 @@ export default function StockTransfers() {
     };
     const c = config[status] || { label: status, className: '' };
     return <Badge variant="outline" className={c.className}>{c.label}</Badge>;
-  };
-
-  const handleSave = () => {
-    createTransfer.mutate({
-      from_branch_name: formData.from_branch_name,
-      to_branch_name: formData.to_branch_name,
-      items: [],
-      notes: formData.notes,
-    }, { onSuccess: () => setAddDialogOpen(false) });
   };
 
   if (isLoading) {
@@ -177,9 +221,10 @@ export default function StockTransfers() {
 
       {/* Add Dialog */}
       <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>New Stock Transfer</DialogTitle><DialogDescription>Transfer inventory between branches.</DialogDescription></DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New Stock Transfer</DialogTitle><DialogDescription>Select branches and add products to transfer.</DialogDescription></DialogHeader>
           <div className="space-y-4">
+            {/* Branch selection */}
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label>From Branch *</Label>
@@ -202,14 +247,75 @@ export default function StockTransfers() {
                 </Select>
               </div>
             </div>
+
+            {/* Product line item picker */}
+            <div className="border rounded-lg p-4 space-y-3">
+              <Label className="text-base font-semibold">Add Products</Label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or SKU..."
+                    value={itemSearch}
+                    onChange={e => setItemSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                </div>
+                <Select value={itemProductId} onValueChange={setItemProductId}>
+                  <SelectTrigger className="w-[220px]"><SelectValue placeholder="Select product" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select product...</SelectItem>
+                    {filteredProductOptions.slice(0, 50).map(p => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name} {p.sku ? `(${p.sku})` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  type="number" min={1} value={itemQty}
+                  onChange={e => setItemQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-20" placeholder="Qty"
+                />
+                <Button type="button" onClick={addTransferItem} disabled={itemProductId === 'none'}>
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+
+              {/* Item list */}
+              {transferItems.length > 0 ? (
+                <div className="space-y-2 mt-2">
+                  {transferItems.map(item => (
+                    <div key={item.product_id} className="flex items-center justify-between p-2 bg-muted rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">{item.product_name}</p>
+                        {item.sku && <Badge variant="outline" className="text-xs font-mono">{item.sku}</Badge>}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge variant="secondary">×{item.quantity}</Badge>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeTransferItem(item.product_id)}>
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground text-right">{transferItems.length} product(s) · {transferItems.reduce((s, i) => s + i.quantity, 0)} total units</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">No items added yet. Search and select products above.</p>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label>Notes</Label>
-              <Textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Transfer notes..." rows={3} />
+              <Textarea value={formData.notes} onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Transfer notes..." rows={2} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={createTransfer.isPending}>Create Transfer</Button>
+            <Button variant="outline" onClick={() => { setAddDialogOpen(false); setTransferItems([]); }}>Cancel</Button>
+            <Button onClick={handleSave} disabled={createTransfer.isPending || !formData.from_branch_name || !formData.to_branch_name}>
+              Create Transfer {transferItems.length > 0 ? `(${transferItems.length} items)` : ''}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -9,6 +9,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Search, Download, TrendingUp, TrendingDown, Minus, Package, DollarSign, Award, ArrowUpDown, Loader2 } from 'lucide-react';
 import StatCard from '@/components/admin/StatCard';
 import { useProductsReport } from '@/hooks/useReports';
+import { exportToPDF } from '@/lib/exportUtils';
+import { format } from 'date-fns';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(142 76% 36%)', 'hsl(221 83% 53%)', 'hsl(25 95% 53%)', 'hsl(270 76% 50%)'];
 
@@ -66,13 +68,16 @@ export default function ProductsReport() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" id="products-report-content">
+      <div className="flex items-center justify-between" data-html2canvas-ignore="true">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Product Performance</h1>
           <p className="text-muted-foreground">Analyze product sales, profitability, and trends</p>
         </div>
-        <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-2" />Export Report</Button>
+        <Button variant="outline" size="sm" onClick={() => exportToPDF('products-report-content', `Products_Report_${format(new Date(), 'yyyyMMdd')}.pdf`)}>
+          <Download className="h-4 w-4 mr-2" />
+          Export Report
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

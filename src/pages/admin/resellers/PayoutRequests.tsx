@@ -224,8 +224,9 @@ export default function PayoutRequests() {
       setPaymentReference('');
       setUploadedFileUrl(null);
       setSelectedFile(null);
-    } catch (err) {
-      toast.error('Failed to process payout');
+    } catch (err: any) {
+      console.error("Payout error:", err);
+      toast.error(`Failed: ${err.message || JSON.stringify(err)}`);
     }
   };
 

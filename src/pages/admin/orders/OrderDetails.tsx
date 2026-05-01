@@ -51,6 +51,7 @@ import { StatusBadge } from '@/components/admin/StatusBadge';
 import { useAdminOrder, useUpdateOrderStatus } from '@/hooks/useAdminOrders';
 import { useCreateAuditLog } from '@/hooks/useSecurity';
 import { cn } from '@/lib/utils';
+import { Textarea } from '@/components/ui/textarea';
 
 const formatCurrency = (amount: any) => {
   const num = Number(amount) || 0;
@@ -79,6 +80,8 @@ export default function OrderDetails() {
 
   const [isStatusDialogOpen, setIsStatusDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [isSendUpdateOpen, setIsSendUpdateOpen] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState('');
 
   if (isLoading) {
     return (
@@ -180,10 +183,60 @@ export default function OrderDetails() {
             <Printer className="h-4 w-4" />
             Print Invoice
           </Button>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => {
+              setUpdateMessage(
+                `Dear customer, your order #${order.order_number} is currently ${order.order_status.replace(/_/g, ' ')}. Thank you for shopping with us!`
+              );
+              setIsSendUpdateOpen(true);
+            }}
+          >
             <Send className="h-4 w-4" />
             Send Update
           </Button>
+
+          {/* Send Update Dialog */}
+          <Dialog open={isSendUpdateOpen} onOpenChange={setIsSendUpdateOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Send Order Update</DialogTitle>
+                <DialogDescription>
+                  Send a status update to the customer for order {order.order_number}.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Customer Phone</p>
+                  <p className="text-sm text-muted-foreground bg-muted px-3 py-2 rounded-md">
+                    {order.shipping_phone || 'No phone on record'}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Message</p>
+                  <Textarea
+                    value={updateMessage}
+                    onChange={(e) => setUpdateMessage(e.target.value)}
+                    rows={4}
+                    className="resize-none"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsSendUpdateOpen(false)}>Cancel</Button>
+                <Button onClick={() => {
+                  const waUrl = `https://wa.me/${(order.shipping_phone || '').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(updateMessage)}`;
+                  window.open(waUrl, '_blank');
+                  setIsSendUpdateOpen(false);
+                }}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Send via WhatsApp
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Dialog open={isStatusDialogOpen} onOpenChange={setIsStatusDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-2" onClick={() => setSelectedStatus(order.order_status)}>

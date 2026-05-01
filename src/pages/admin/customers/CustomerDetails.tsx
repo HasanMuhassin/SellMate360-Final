@@ -223,13 +223,13 @@ export default function CustomerDetails() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <StatCard title="Total Orders" value={customer.order_count.toString()} icon={ShoppingBag} description="Lifetime orders" />
-        <StatCard title="Total Spent" value={formatCurrency(Number(customer.total_spent))} icon={DollarSign} description="Lifetime value" />
-        <StatCard title="Avg. Order Value" value={formatCurrency(Number(customer.average_order_value))} icon={CreditCard} description="Per order" />
+        <StatCard title="Total Orders" value={(customer.order_count || 0).toString()} icon={ShoppingBag} description="Lifetime orders" />
+        <StatCard title="Total Spent" value={formatCurrency(Number(customer.total_spent || 0))} icon={DollarSign} description="Lifetime value" />
+        <StatCard title="Avg. Order Value" value={formatCurrency(Number(customer.average_order_value || 0))} icon={CreditCard} description="Per order" />
         <StatCard
           title="COD Rejections"
-          value={`${customer.cod_rejection_count} (${Number(customer.cod_rejection_rate).toFixed(0)}%)`}
-          icon={Number(customer.cod_rejection_rate) > 20 ? AlertTriangle : Package}
+          value={`${customer.cod_rejection_count || 0} (${Number(customer.cod_rejection_rate || 0).toFixed(0)}%)`}
+          icon={Number(customer.cod_rejection_rate || 0) > 20 ? AlertTriangle : Package}
           description="Rejection rate"
         />
       </div>

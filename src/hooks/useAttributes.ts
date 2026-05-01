@@ -32,7 +32,7 @@ export function useAttributes() {
         .from("attributes")
         .select(`
           id, name, type,
-          attribute_options(id, attribute_id, value, meta)
+          attribute_options!attribute_options_attribute_id_fkey(id, attribute_id, value, meta)
         `)
         .order("name");
 

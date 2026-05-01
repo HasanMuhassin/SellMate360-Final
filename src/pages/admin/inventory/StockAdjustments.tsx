@@ -77,14 +77,24 @@ export default function StockAdjustments() {
     const product = products.find((p: any) => p.id === formData.product_id);
     if (!product) return;
 
+    let actualChange = formData.quantity_change;
+    // For reduction types, ensure the change is negative if the user entered a positive number
+    if (['remove', 'damage', 'expired'].includes(formData.type) && actualChange > 0) {
+      actualChange = -actualChange;
+    }
+    // For addition types, ensure it's positive
+    if (formData.type === 'add' && actualChange < 0) {
+      actualChange = Math.abs(actualChange);
+    }
+
     createAdjustment.mutate({
       product_id: formData.product_id,
       product_name: product.name,
       sku: product.sku || '',
       type: formData.type,
       quantity_before: product.stock || 0,
-      quantity_change: formData.quantity_change,
-      quantity_after: (product.stock || 0) + formData.quantity_change,
+      quantity_change: actualChange,
+      quantity_after: (product.stock || 0) + actualChange,
       reason: formData.reason,
       notes: formData.notes || null,
       created_by: 'Admin',

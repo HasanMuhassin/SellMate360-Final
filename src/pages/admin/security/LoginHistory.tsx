@@ -22,8 +22,7 @@ export default function LoginHistoryPage() {
   const filteredAttempts = attempts.filter(attempt => {
     const matchesSearch =
       attempt.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      attempt.ip_address.includes(searchQuery) ||
-      (attempt.location?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+      (attempt.ip_address?.includes(searchQuery) ?? false);
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'success' && attempt.success) ||
@@ -35,6 +34,7 @@ export default function LoginHistoryPage() {
     attempts
       .filter(a => !a.success)
       .reduce((acc, a) => {
+        if (!a.ip_address) return acc;
         const count = attempts.filter(x => x.ip_address === a.ip_address && !x.success).length;
         if (count >= 3) acc.push(a.ip_address);
         return acc;
@@ -43,9 +43,9 @@ export default function LoginHistoryPage() {
 
   const handleExport = () => {
     const csv = [
-      ['Timestamp', 'Email', 'Status', 'IP Address', 'Location', 'Failure Reason'].join(','),
+      ['Timestamp', 'Email', 'Status', 'IP Address', 'Failure Reason'].join(','),
       ...filteredAttempts.map(a =>
-        [format(new Date(a.created_at), 'yyyy-MM-dd HH:mm:ss'), a.email, a.success ? 'Success' : 'Failed', a.ip_address, a.location || 'Unknown', a.failure_reason || ''].join(',')
+        [format(new Date(a.created_at), 'yyyy-MM-dd HH:mm:ss'), a.email, a.success ? 'Success' : 'Failed', a.ip_address || '', a.failure_reason || ''].join(',')
       ),
     ].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -104,10 +104,9 @@ export default function LoginHistoryPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Timestamp</TableHead>
-                <TableHead>User / Email</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>IP Address</TableHead>
-                <TableHead>Location</TableHead>
                 <TableHead>Device</TableHead>
                 <TableHead>Details</TableHead>
               </TableRow>
@@ -124,11 +123,7 @@ export default function LoginHistoryPage() {
                       <div className="text-muted-foreground">{format(new Date(attempt.created_at), 'h:mm:ss a')}</div>
                     </TableCell>
                     <TableCell>
-                      {attempt.user_name ? (
-                        <><div className="font-medium">{attempt.user_name}</div><div className="text-sm text-muted-foreground">{attempt.email}</div></>
-                      ) : (
-                        <div className="text-sm">{attempt.email}</div>
-                      )}
+                      <div className="text-sm">{attempt.email}</div>
                     </TableCell>
                     <TableCell>
                       {attempt.success ? (
@@ -139,14 +134,11 @@ export default function LoginHistoryPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm">{attempt.ip_address}</span>
+                        <span className="font-mono text-sm">{attempt.ip_address || 'N/A'}</span>
                         {isSuspicious && (
                           <Tooltip><TooltipTrigger><AlertTriangle className="h-4 w-4 text-destructive" /></TooltipTrigger><TooltipContent>Multiple failed attempts from this IP</TooltipContent></Tooltip>
                         )}
                       </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1 text-sm"><MapPin className="h-3 w-3 text-muted-foreground" />{attempt.location || 'Unknown'}</div>
                     </TableCell>
                     <TableCell>
                       <Tooltip>

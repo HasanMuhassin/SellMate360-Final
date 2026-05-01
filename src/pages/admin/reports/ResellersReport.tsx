@@ -9,6 +9,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Search, Download, Users, DollarSign, TrendingUp, Wallet, Award, AlertTriangle, Loader2 } from 'lucide-react';
 import StatCard from '@/components/admin/StatCard';
 import { useResellersReport } from '@/hooks/useReports';
+import { exportToPDF } from '@/lib/exportUtils';
+import { format } from 'date-fns';
 
 const TIER_COLORS = { platinum: 'hsl(270 76% 50%)', gold: 'hsl(45 93% 47%)', silver: 'hsl(0 0% 60%)' };
 
@@ -57,13 +59,16 @@ export default function ResellersReport() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" id="resellers-report-content">
+      <div className="flex items-center justify-between" data-html2canvas-ignore="true">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Reseller Commission Report</h1>
           <p className="text-muted-foreground">Track reseller performance and commission payouts</p>
         </div>
-        <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-2" />Export Report</Button>
+        <Button variant="outline" size="sm" onClick={() => exportToPDF('resellers-report-content', `Resellers_Report_${format(new Date(), 'yyyyMMdd')}.pdf`)}>
+          <Download className="h-4 w-4 mr-2" />
+          Export Report
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

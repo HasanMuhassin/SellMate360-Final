@@ -135,6 +135,7 @@ const navigation: NavItem[] = [
       { title: 'Pages', href: '/admin/content/pages' },
       { title: 'SEO', href: '/admin/content/seo' },
       { title: 'Announcements', href: '/admin/content/announcements' },
+      { title: 'FAQ Management', href: '/admin/content/faqs' },
     ],
   },
   {

@@ -74,7 +74,6 @@ export default function AdminLogin() {
         createLoginEntry.mutate({
           email,
           success: true,
-          metadata: { portal: 'admin' }
         });
         
         setVerificationStatus('success');
@@ -88,7 +87,6 @@ export default function AdminLogin() {
         email,
         success: false,
         failure_reason: result.error || 'Login failed',
-        metadata: { portal: 'admin' }
       });
 
       // Check if it's a timeout error

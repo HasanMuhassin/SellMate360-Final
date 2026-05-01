@@ -7,6 +7,8 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { Download, Calendar, CreditCard, Wallet, Banknote, TrendingUp, CheckCircle, Loader2 } from 'lucide-react';
 import StatCard from '@/components/admin/StatCard';
 import { usePaymentsReport } from '@/hooks/useReports';
+import { exportToPDF } from '@/lib/exportUtils';
+import { format } from 'date-fns';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(142 76% 36%)', 'hsl(221 83% 53%)', 'hsl(25 95% 53%)'];
 const DAYS_MAP: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90 };
@@ -45,8 +47,8 @@ export default function PaymentsReport() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" id="payments-report-content">
+      <div className="flex items-center justify-between" data-html2canvas-ignore="true">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Payments Report</h1>
           <p className="text-muted-foreground">Payment method analysis and settlement tracking</p>
@@ -60,7 +62,7 @@ export default function PaymentsReport() {
               <SelectItem value="90d">Last 90 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm"><Download className="h-4 w-4 mr-2" />Export</Button>
+          <Button variant="outline" size="sm" onClick={() => exportToPDF('payments-report-content', `Payments_Report_${format(new Date(), 'yyyyMMdd')}.pdf`)}><Download className="h-4 w-4 mr-2" />Export</Button>
         </div>
       </div>
 

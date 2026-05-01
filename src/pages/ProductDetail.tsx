@@ -31,6 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { Skeleton } from '@/components/ui/skeleton';
+import SEOMeta from '@/components/SEOMeta';
 
 const districts = [
   'Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya',
@@ -131,6 +132,12 @@ export default function ProductDetail() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta
+        pageType="product"
+        titleOverride={`${product.name} | SellMate360`}
+        descriptionOverride={product.description?.substring(0, 160)}
+        imageOverride={product.images?.[0]}
+      />
       {/* Breadcrumb */}
       <div className="bg-muted/50 py-4">
         <div className="container">

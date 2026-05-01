@@ -9,6 +9,7 @@ import ProductCard from '@/components/products/ProductCard';
 import CategoryCard from '@/components/products/CategoryCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import SEOMeta from '@/components/SEOMeta';
 
 const trustBadges = [
   { icon: Truck, title: 'Fast Delivery', description: '1-3 Days Island-wide' },
@@ -71,6 +72,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen">
+      <SEOMeta pageType="home" />
       {/* Hero Banner */}
       <section className="relative overflow-hidden">
         <div className="relative h-[400px] sm:h-[500px] lg:h-[600px]">

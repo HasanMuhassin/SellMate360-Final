@@ -38,9 +38,9 @@ serve(async (req) => {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return jsonResponse({ error: "No authorization header" }, 401);
 
-    const externalUrl = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-    const externalAnonKey = Deno.env.get("EXTERNAL_SUPABASE_ANON_KEY")!;
-    const externalServiceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+    const externalUrl = Deno.env.get("SUPABASE_URL")!;
+    const externalAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const externalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     const anonClient = createClient(externalUrl, externalAnonKey, {
       global: { headers: { Authorization: authHeader } },

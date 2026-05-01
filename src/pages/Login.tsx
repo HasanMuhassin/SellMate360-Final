@@ -76,7 +76,6 @@ export default function Login() {
       createLoginEntry.mutate({
         email: data.email,
         success: true,
-        metadata: { portal: 'customer', action: 'login' }
       });
 
       toast({
@@ -90,7 +89,6 @@ export default function Login() {
         email: data.email,
         success: false,
         failure_reason: error.message || 'Invalid email or password',
-        metadata: { portal: 'customer', action: 'login' }
       });
 
       toast({
@@ -138,7 +136,6 @@ export default function Login() {
       createLoginEntry.mutate({
         email: data.email,
         success: true,
-        metadata: { portal: 'customer', action: 'register' }
       });
 
       // If auto-confirmed, user is logged in immediately
@@ -157,7 +154,6 @@ export default function Login() {
         email: data.email,
         success: false,
         failure_reason: error.message || 'Could not create account',
-        metadata: { portal: 'customer', action: 'register' }
       });
 
       toast({

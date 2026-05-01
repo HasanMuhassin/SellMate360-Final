@@ -3,6 +3,7 @@ import { Facebook, Instagram, Twitter, Mail, Phone, MapPin, Youtube } from 'luci
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { usePublicCompany } from '@/hooks/usePublicStoreSettings';
+import { usePublicCMSPages } from '@/hooks/usePublicCMS';
 
 const footerLinks = {
   shop: [
@@ -27,6 +28,7 @@ const footerLinks = {
 
 export default function Footer() {
   const { company } = usePublicCompany();
+  const { data: cmsPages = [] } = usePublicCMSPages();
 
   const companyName = company?.name || 'SellMate360';
   const companyEmail = company?.email || 'support@sellmate360.lk';
@@ -149,6 +151,16 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              {/* Dynamic CMS pages marked show_in_footer */}
+              {cmsPages
+                .filter((p) => p.show_in_footer)
+                .map((p) => (
+                  <li key={p.id}>
+                    <Link to={`/pages/${p.slug}`} className="text-sm text-background/70 hover:text-primary transition-colors">
+                      {p.title}
+                    </Link>
+                  </li>
+                ))}
             </ul>
           </div>
         </div>

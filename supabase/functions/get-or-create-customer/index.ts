@@ -21,9 +21,9 @@ serve(async (req) => {
     }
 
     // Use external Supabase credentials
-    const externalUrl = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-    const externalAnonKey = Deno.env.get("EXTERNAL_SUPABASE_ANON_KEY")!;
-    const externalServiceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+    const externalUrl = Deno.env.get("SUPABASE_URL")!;
+    const externalAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const externalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
     // Verify user with anon client using their token
     const anonClient = createClient(externalUrl, externalAnonKey, {

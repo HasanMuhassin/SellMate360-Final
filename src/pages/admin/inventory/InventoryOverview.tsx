@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { exportToCsv } from '@/lib/exportCsv';
 import { Package, AlertTriangle, Archive, TrendingUp, Search, Filter, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,9 +86,21 @@ export default function InventoryOverview() {
           <h1 className="text-2xl font-bold text-foreground">Inventory Overview</h1>
           <p className="text-muted-foreground">Monitor stock levels across all products</p>
         </div>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" onClick={() => {
+          const rows = filteredItems.map((item: any) => ({
+            'Product': item.product_name || '',
+            'SKU': item.sku || '',
+            'Category': item.category || '',
+            'Stock': item.quantity || 0,
+            'Status': item.status || '',
+            'Unit Value (LKR)': item.unit_value || 0,
+            'Total Value (LKR)': item.total_value || 0,
+            'Reorder Point': item.reorder_point || 0,
+          }));
+          exportToCsv(`Inventory_Overview_${new Date().toISOString().split('T')[0]}`, rows);
+        }}>
           <Download className="mr-2 h-4 w-4" />
-          Export Report
+          Export CSV
         </Button>
       </div>
 

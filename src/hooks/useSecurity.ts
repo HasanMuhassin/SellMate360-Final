@@ -18,11 +18,11 @@ export interface AuditLogRow {
 
 export interface LoginHistoryRow {
   id: string;
-  user_id: string;
+  email: string;
+  success: boolean;
   ip_address: string | null;
   user_agent: string | null;
-  location: string | null;
-  status: string;
+  failure_reason: string | null;
   created_at: string;
 }
 
@@ -89,7 +89,7 @@ export function useLoginHistory() {
     queryKey: ["login-history"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('login_history')
+        .from('login_attempts')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200);
@@ -102,14 +102,15 @@ export function useLoginHistory() {
 export function useCreateLoginEntry() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (entry: Partial<LoginHistoryRow>) => {
-      const { data, error } = await supabase
-        .from('login_history')
-        .insert(entry)
-        .select()
-        .single();
+    mutationFn: async (entry: { email: string; success: boolean; failure_reason?: string | null }) => {
+      // Use a SECURITY DEFINER RPC to bypass RLS — needed for failed/anon logins
+      const { error } = await supabase.rpc('record_login_attempt', {
+        p_email: entry.email,
+        p_success: entry.success,
+        p_failure_reason: entry.failure_reason || null,
+        p_user_agent: typeof window !== 'undefined' ? navigator.userAgent : null,
+      });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["login-history"] }),
   });
@@ -161,8 +162,8 @@ export function useSecurityStats() {
         { count: criticalActions },
         { count: roleChanges }
       ] = await Promise.all([
-        supabase.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', last24h),
-        supabase.from('login_history').select('*', { count: 'exact', head: true }).gte('created_at', last24h).neq('status', 'success'),
+        supabase.from('login_attempts').select('*', { count: 'exact', head: true }).gte('created_at', last24h),
+        supabase.from('login_attempts').select('*', { count: 'exact', head: true }).gte('created_at', last24h).eq('success', false),
         supabase.from('audit_logs').select('*', { count: 'exact', head: true }).gte('created_at', last7d).eq('level', 'critical'),
         supabase.from('role_changes').select('*', { count: 'exact', head: true }).gte('created_at', last30d),
       ]);

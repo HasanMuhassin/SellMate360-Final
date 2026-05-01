@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Slider } from '@/components/ui/slider';
 import { Skeleton } from '@/components/ui/skeleton';
+import SEOMeta from '@/components/SEOMeta';
 import {
   Select,
   SelectContent,
@@ -178,7 +179,7 @@ export default function Shop() {
         <CollapsibleContent className="pt-3">
           <Slider
             min={0}
-            max={100000}
+            max={1000000}
             step={1000}
             value={priceRange}
             onValueChange={setPriceRange}
@@ -233,6 +234,7 @@ export default function Shop() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEOMeta pageType="shop" />
       <div className="bg-muted/50 py-8">
         <div className="container">
           <h1 className="text-3xl font-bold mb-2">

@@ -38,23 +38,15 @@ export default function SupportTickets() {
   const fetchTickets = async () => {
     setLoading(true);
     try {
-      const session = (await supabase.auth.getSession()).data.session;
-      if (!session) return;
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-      const res = await fetch(`${functionsBaseUrl}/manage-support-tickets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ action: 'list_all' }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to fetch');
-      setTickets(data.tickets || []);
+      if (error) throw error;
+      setTickets(data || []);
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to fetch tickets');
     } finally {
       setLoading(false);
     }
@@ -66,27 +58,22 @@ export default function SupportTickets() {
 
   const updateTicketStatus = async (ticketId: string, newStatus: string) => {
     try {
-      const session = (await supabase.auth.getSession()).data.session;
-      if (!session) return;
+      const { data, error } = await supabase
+        .from('support_tickets')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', ticketId)
+        .select()
+        .single();
 
-      const res = await fetch(`${functionsBaseUrl}/manage-support-tickets`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status: newStatus }),
-      });
-
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || 'Failed to update');
-      toast.success(`Ticket status updated to ${newStatus}`);
+      if (error) throw error;
+      
+      toast.success(`Ticket status updated to ${newStatus.replace('_', ' ')}`);
       fetchTickets();
       if (selectedTicket?.id === ticketId) {
         setSelectedTicket({ ...selectedTicket, status: newStatus });
       }
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || 'Failed to update ticket');
     }
   };
 

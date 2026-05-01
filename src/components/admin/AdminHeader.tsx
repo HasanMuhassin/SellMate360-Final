@@ -21,8 +21,11 @@ import {
   Moon,
   Sun,
   ChevronDown,
+  CheckCircle2,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAdminNotifications } from '@/hooks/useAdminNotifications';
+import { formatDistanceToNow } from 'date-fns';
 
 export default function AdminHeader() {
   const { user, logout } = useAdminAuth();
@@ -39,13 +42,7 @@ export default function AdminHeader() {
     document.documentElement.classList.toggle('dark');
   };
 
-  const notifications = [
-    { id: 1, title: 'New order received', message: 'Order #ORD-2024-045 placed', time: '2 min ago', unread: true },
-    { id: 2, title: 'Low stock alert', message: 'Smart Watch Series X - Only 5 left', time: '1 hour ago', unread: true },
-    { id: 3, title: 'Payout request', message: 'Saman Traders requested LKR 45,000', time: '3 hours ago', unread: false },
-  ];
-
-  const unreadCount = notifications.filter(n => n.unread).length;
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useAdminNotifications();
 
   return (
     <header className="fixed left-64 right-0 top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
@@ -80,25 +77,70 @@ export default function AdminHeader() {
           <DropdownMenuContent align="end" className="w-80">
             <DropdownMenuLabel className="flex items-center justify-between">
               Notifications
-              <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary">
-                Mark all read
-              </Button>
+              {unreadCount > 0 && (
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-auto p-0 text-xs text-primary"
+                  onClick={() => markAllAsRead()}
+                >
+                  Mark all read
+                </Button>
+              )}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            {notifications.map(notification => (
-              <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-1 p-3">
-                <div className="flex items-center gap-2">
-                  {notification.unread && (
-                    <span className="h-2 w-2 rounded-full bg-primary" />
-                  )}
-                  <span className="font-medium">{notification.title}</span>
-                </div>
-                <span className="text-sm text-muted-foreground">{notification.message}</span>
-                <span className="text-xs text-muted-foreground">{notification.time}</span>
-              </DropdownMenuItem>
-            ))}
+            {notifications.length === 0 ? (
+              <div className="p-4 text-center text-sm text-muted-foreground">
+                No notifications right now
+              </div>
+            ) : (
+              <div className="max-h-[300px] overflow-y-auto">
+                {notifications.map(notification => (
+                  <DropdownMenuItem 
+                    key={notification.id} 
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onClick={() => {
+                      if (!notification.is_read) {
+                        markAsRead(notification.id);
+                      }
+                      if (notification.link) {
+                        navigate(notification.link);
+                      }
+                    }}
+                  >
+                    <div className="flex w-full items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {!notification.is_read && (
+                          <span className="h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
+                        )}
+                        <span className={`font-medium ${notification.is_read ? 'text-muted-foreground' : ''}`}>
+                          {notification.title}
+                        </span>
+                      </div>
+                      {!notification.is_read && (
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6 rounded-full"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            markAsRead(notification.id);
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                        </Button>
+                      )}
+                    </div>
+                    <span className="text-sm text-muted-foreground">{notification.message}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
+                    </span>
+                  </DropdownMenuItem>
+                ))}
+              </div>
+            )}
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="justify-center text-primary">
+            <DropdownMenuItem className="justify-center text-primary cursor-pointer" onClick={() => navigate('/admin/settings/notifications')}>
               View all notifications
             </DropdownMenuItem>
           </DropdownMenuContent>

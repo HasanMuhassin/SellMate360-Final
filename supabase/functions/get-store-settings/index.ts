@@ -19,8 +19,8 @@ serve(async (req) => {
   }
 
   try {
-    const externalUrl = Deno.env.get("EXTERNAL_SUPABASE_URL")!;
-    const externalServiceKey = Deno.env.get("EXTERNAL_SUPABASE_SERVICE_ROLE_KEY")!;
+    const externalUrl = Deno.env.get("SUPABASE_URL")!;
+    const externalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const serviceClient = createClient(externalUrl, externalServiceKey);
 
     // Fetch all public settings in parallel

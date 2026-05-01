@@ -235,7 +235,7 @@ export function useShippableOrders() {
       const { data: orders, error } = await supabase
         .from('orders')
         .select('id, order_number, shipping_name, shipping_phone, shipping_street, shipping_district, shipping_city, total, order_status')
-        .in('order_status', ['confirmed', 'processing'])
+        .in('order_status', ['confirmed', 'processing', 'packed', 'shipped'])
         .order('created_at', { ascending: false });
       if (error) throw error;
 
@@ -335,24 +335,69 @@ export function useUpdateShipmentStatus() {
         description: `Status updated to ${payload.status.replace('_', ' ')}`,
       });
 
-      // If delivered, update linked order status too
-      if (payload.status === 'delivered') {
-        const { data: shipment } = await supabase
-          .from('shipments')
-          .select('order_id')
-          .eq('id', payload.id)
-          .single();
-        if (shipment) {
+      // Fetch the shipment details to get the order ID and COD amount
+      const { data: shipment } = await supabase
+        .from('shipments')
+        .select('order_id, cod_amount')
+        .eq('id', payload.id)
+        .single();
+
+      if (shipment) {
+        // 1. Sync the status back to the order
+        let orderStatus = '';
+        if (payload.status === 'in_transit') orderStatus = 'shipped';
+        else if (payload.status === 'out_for_delivery') orderStatus = 'out_for_delivery';
+        else if (payload.status === 'delivered') orderStatus = 'delivered';
+        else if (payload.status === 'returned') orderStatus = 'returned';
+        else if (payload.status === 'cancelled') orderStatus = 'cancelled';
+        
+        if (orderStatus) {
           await supabase
             .from('orders')
-            .update({ order_status: 'delivered' })
+            .update({ order_status: orderStatus })
             .eq('id', shipment.order_id);
+        }
+
+        // 2. Transaction Integration (Payments)
+        if (payload.status === 'delivered') {
+          // Check if payment already exists
+          const { data: existingPayment } = await supabase
+            .from('payments')
+            .select('id')
+            .eq('order_id', shipment.order_id)
+            .maybeSingle();
+
+          if (!existingPayment) {
+            // Create a new collected COD payment
+            await supabase.from('payments').insert({
+              order_id: shipment.order_id,
+              amount: shipment.cod_amount,
+              method: 'cod',
+              status: 'collected',
+              notes: 'Automatically generated upon successful delivery'
+            });
+          } else {
+             // Mark existing pending payment as collected
+             await supabase
+               .from('payments')
+               .update({ status: 'collected' })
+               .eq('id', existingPayment.id)
+               .eq('status', 'pending');
+          }
+        } else if (payload.status === 'returned' || payload.status === 'cancelled') {
+          // Reject any pending payments
+          await supabase
+            .from('payments')
+            .update({ status: 'rejected' })
+            .eq('order_id', shipment.order_id)
+            .eq('status', 'pending');
         }
       }
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['shipments'] });
       qc.invalidateQueries({ queryKey: ['shipment', vars.id] });
+      qc.invalidateQueries({ queryKey: ['admin-orders'] });
       toast.success('Shipment status updated');
     },
     onError: (err: Error) => toast.error(err.message),

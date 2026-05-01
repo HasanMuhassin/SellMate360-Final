@@ -82,12 +82,19 @@ export function useCreateTicket() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (ticket: any) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("You must be logged in to create a ticket.");
+      }
+
       const { count } = await supabase.from('support_tickets').select('*', { count: 'exact', head: true });
       const ticketNum = `TKT-${String((count || 0) + 1).padStart(5, '0')}`;
       
       const { data, error } = await supabase
         .from('support_tickets')
-        .insert({ ...ticket, ticket_number: ticketNum })
+        .insert({ ...ticket, ticket_number: ticketNum, user_id: userId })
         .select()
         .single();
       

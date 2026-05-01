@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useSession } from '@/hooks/useAuth';
@@ -375,3 +376,90 @@ export function usePlaceResellerOrder() {
     },
   });
 }
+
+// =====================================================
+// NOTIFICATIONS
+// =====================================================
+
+export interface ResellerNotification {
+  id: string;
+  reseller_id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  is_read: boolean;
+  created_at: string;
+}
+
+export function useResellerNotifications(resellerId?: string) {
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!resellerId) return;
+
+    const channel = supabase
+      .channel(`reseller_notifications_${resellerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'reseller_notifications',
+          filter: `reseller_id=eq.${resellerId}`,
+        },
+        () => {
+          qc.invalidateQueries({ queryKey: ['reseller-notifications', resellerId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [resellerId, qc]);
+
+  return useQuery({
+    queryKey: ['reseller-notifications', resellerId],
+    queryFn: async () => {
+      if (!resellerId) return [];
+      
+      const { data, error } = await supabase
+        .from('reseller_notifications')
+        .select('*')
+        .eq('reseller_id', resellerId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      return data as ResellerNotification[];
+    },
+    enabled: !!resellerId,
+  });
+}
+
+export function useMarkNotificationRead() {
+  const queryClient = useQueryClient();
+  const { data: reseller } = useReseller();
+
+  return useMutation({
+    mutationFn: async (notificationId: string | 'all') => {
+      if (!reseller) throw new Error('Reseller not found');
+      
+      let query = supabase.from('reseller_notifications').update({ is_read: true });
+      
+      if (notificationId === 'all') {
+        query = query.eq('reseller_id', reseller.id).eq('is_read', false);
+      } else {
+        query = query.eq('id', notificationId).eq('reseller_id', reseller.id);
+      }
+      
+      const { error } = await query;
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reseller-notifications', reseller?.id] });
+    },
+  });
+}
+

@@ -37,6 +37,7 @@ import {
 import StatCard from '@/components/admin/StatCard';
 import { useSalesReport } from '@/hooks/useReports';
 import { format } from 'date-fns';
+import { exportToPDF } from '@/lib/exportUtils';
 
 const COLORS = ['hsl(var(--primary))', 'hsl(142 76% 36%)', 'hsl(221 83% 53%)', 'hsl(25 95% 53%)'];
 
@@ -83,8 +84,8 @@ export default function SalesReport() {
   }));
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6" id="sales-report-content">
+      <div className="flex items-center justify-between" data-html2canvas-ignore="true">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Sales Report</h1>
           <p className="text-muted-foreground">Comprehensive sales analytics and trends</p>
@@ -113,7 +114,7 @@ export default function SalesReport() {
               <SelectItem value="pos">POS</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => exportToPDF('sales-report-content', `Sales_Report_${format(new Date(), 'yyyyMMdd')}.pdf`)}>
             <Download className="h-4 w-4 mr-2" />
             Export
           </Button>

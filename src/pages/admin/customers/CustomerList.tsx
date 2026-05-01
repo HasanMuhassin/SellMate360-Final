@@ -210,17 +210,17 @@ export default function CustomerList() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {Number(customer.cod_rejection_rate) > 20 && (
+                        {Number(customer.cod_rejection_rate || 0) > 20 && (
                           <AlertTriangle className="h-4 w-4 text-red-500" />
                         )}
                         <span
                           className={
-                            Number(customer.cod_rejection_rate) > 20
+                            Number(customer.cod_rejection_rate || 0) > 20
                               ? 'text-red-600 font-medium'
                               : 'text-muted-foreground'
                           }
                         >
-                          {customer.cod_rejection_count} ({Number(customer.cod_rejection_rate).toFixed(0)}%)
+                          {customer.cod_rejection_count || 0} ({Number(customer.cod_rejection_rate || 0).toFixed(0)}%)
                         </span>
                       </div>
                     </TableCell>

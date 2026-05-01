@@ -9,6 +9,7 @@ import { SessionProvider } from "@/context/SessionContext";
 import Header from "@/components/layout/Header";
 import Footer from "@/components/layout/Footer";
 import WhatsAppButton from "@/components/layout/WhatsAppButton";
+import AnnouncementBanner from "@/components/layout/AnnouncementBanner";
 import Home from "./pages/Home";
 import Shop from "./pages/Shop";
 import CategoriesPage from "./pages/Categories";
@@ -18,6 +19,8 @@ import Checkout from "./pages/Checkout";
 import OrderConfirmation from "./pages/OrderConfirmation";
 import TrackOrder from "./pages/TrackOrder";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Account from "./pages/Account";
 import ResellerPortal from "./pages/ResellerPortal";
@@ -29,6 +32,8 @@ import DeliveryInfo from "./pages/DeliveryInfo";
 import ReturnsPolicy from "./pages/ReturnsPolicy";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsConditions from "./pages/TermsConditions";
+import FAQPage from "./pages/FAQ";
+import CMSPage from "./pages/CMSPage";
 import AdminLogin from "./pages/admin/AdminLogin";
 import AdminLayout from "./components/admin/AdminLayout";
 import Dashboard from "./pages/admin/Dashboard";
@@ -75,6 +80,7 @@ import FlashSales from "./pages/admin/promotions/FlashSales";
 import CMSPages from "./pages/admin/content/CMSPages";
 import SEOSettings from "./pages/admin/content/SEOSettings";
 import Announcements from "./pages/admin/content/Announcements";
+import FAQsAdmin from "./pages/admin/content/FAQs";
 import SalesReport from "./pages/admin/reports/SalesReport";
 import ProductsReport from "./pages/admin/reports/ProductsReport";
 import InventoryReport from "./pages/admin/reports/InventoryReport";
@@ -97,7 +103,7 @@ const queryClient = new QueryClient();
 
 function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation();
-  const isAuthPage = location.pathname === '/login' || location.pathname.startsWith('/reseller') || location.pathname.startsWith('/admin');
+  const isAuthPage = location.pathname === '/login' || location.pathname === '/forgot-password' || location.pathname === '/reset-password' || location.pathname.startsWith('/reseller') || location.pathname.startsWith('/admin');
 
   if (isAuthPage) {
     return <>{children}</>;
@@ -105,6 +111,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col">
+      <AnnouncementBanner />
       <Header />
       <main className="flex-1">{children}</main>
       <Footer />
@@ -134,6 +141,8 @@ const App = () => (
                   <Route path="/account" element={<Account />} />
                   <Route path="/categories" element={<CategoriesPage />} />
                   <Route path="/login" element={<Login />} />
+                  <Route path="/forgot-password" element={<ForgotPassword />} />
+                  <Route path="/reset-password" element={<ResetPassword />} />
                   <Route path="/reseller" element={<ResellerPortal />} />
                   <Route path="/reseller/login" element={<ResellerLogin />} />
                   <Route path="/reseller/apply" element={<ResellerApply />} />
@@ -143,6 +152,8 @@ const App = () => (
                   <Route path="/returns" element={<ReturnsPolicy />} />
                   <Route path="/privacy" element={<PrivacyPolicy />} />
                   <Route path="/terms" element={<TermsConditions />} />
+                  <Route path="/faq" element={<FAQPage />} />
+                  <Route path="/pages/:slug" element={<CMSPage />} />
                   <Route path="/db-test" element={<DatabaseTest />} />
                   {/* Admin Routes */}
                   <Route path="/admin/login" element={<AdminLogin />} />
@@ -205,6 +216,7 @@ const App = () => (
                     <Route path="content/pages" element={<CMSPages />} />
                     <Route path="content/seo" element={<SEOSettings />} />
                     <Route path="content/announcements" element={<Announcements />} />
+                    <Route path="content/faqs" element={<FAQsAdmin />} />
                     {/* Reports Module */}
                     <Route path="reports/sales" element={<SalesReport />} />
                     <Route path="reports/products" element={<ProductsReport />} />

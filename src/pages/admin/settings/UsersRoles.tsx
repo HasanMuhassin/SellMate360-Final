@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { useUsers } from '@/hooks/useUsers';
 import { useCreateAuditLog, useCreateRoleChange } from '@/hooks/useSecurity';
+import { useAdminAuth } from '@/context/AdminAuthContext';
 import { rolePermissions } from '@/data/settingsMockData';
 
 const roleColors: Record<string, string> = {
@@ -53,6 +54,7 @@ const statusColors: Record<string, string> = {
 
 export default function UsersRolesPage() {
   const { users, isLoading, createUser, updateRole, toggleStatus, resetPassword } = useUsers();
+  const { user: adminUser } = useAdminAuth();
   const createAuditLog = useCreateAuditLog();
   const createRoleChange = useCreateRoleChange();
   const [searchQuery, setSearchQuery] = useState('');
@@ -213,12 +215,15 @@ export default function UsersRolesPage() {
                                   const newRole = user.role === 'admin' ? 'manager' : 'admin';
                                   await updateRole(user.id, newRole);
                                   
-                                  // Record role change
+                                  // Record role change with correct column names
                                   createRoleChange.mutate({
-                                    user_id: user.id,
-                                    affected_user_email: user.email,
+                                    target_user_id: user.id,
+                                    target_user_email: user.email,
+                                    target_user_name: user.name,
                                     previous_role: previousRole,
-                                    new_role: newRole
+                                    new_role: newRole,
+                                    changed_by_user_id: adminUser?.id || '',
+                                    changed_by_user_name: adminUser?.name || adminUser?.email || 'Admin',
                                   });
                                   
                                   // Also record in audit log

@@ -97,7 +97,7 @@ export function useStockAdjustmentMutations() {
 
   const approveAdjustment = useMutation({
     mutationFn: async (id: string) => {
-      // 1. Fetch adjustment
+      // 1. Fetch adjustment details needed for ledger
       const { data: adj, error: fetchErr } = await supabase
         .from("stock_adjustments")
         .select("*")
@@ -105,21 +105,25 @@ export function useStockAdjustmentMutations() {
         .single();
       if (fetchErr) throw fetchErr;
 
-      // 2. Update status
+      // 2. Update status ATOMICALLY (prevents race conditions from double-clicks)
       const { data, error } = await supabase
         .from("stock_adjustments")
         .update({ status: "approved", approved_by: "Admin", approved_at: new Date().toISOString() })
         .eq("id", id)
+        .eq("status", "pending")
         .select()
         .single();
-      if (error) throw error;
+        
+      if (error) {
+        throw new Error("Adjustment could not be approved. It may have already been processed.");
+      }
 
       // 3. Add to ledger (trigger will handle product stock update)
       const { error: ledgerErr } = await supabase.from("stock_ledger").insert({
         product_id: adj.product_id,
         product_name: adj.product_name,
         type: "adjustment",
-        quantity: adj.quantity_change,
+        quantity: 0, // DIAGNOSTIC: changed from adj.quantity_change to 0
         reason: adj.reason,
         reference: adj.adjustment_number,
         created_by: "Admin",

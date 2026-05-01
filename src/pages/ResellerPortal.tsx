@@ -58,12 +58,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useResellerProducts } from '@/hooks/useProducts';
 import { useSession, useSignOut } from '@/hooks/useAuth';
-import { useIsApprovedReseller, useResellerOrders, useResellerLedger, usePayoutRequests, useCreatePayoutRequest, usePlaceResellerOrder, useResellerCODStats } from '@/hooks/useReseller';
+import { useIsApprovedReseller, useResellerOrders, useResellerLedger, usePayoutRequests, useCreatePayoutRequest, usePlaceResellerOrder, useResellerCODStats, useResellerNotifications, useMarkNotificationRead } from '@/hooks/useReseller';
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -103,6 +108,7 @@ export default function ResellerPortal() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerDistrict, setCustomerDistrict] = useState('');
   const [customerAddress, setCustomerAddress] = useState('');
+  const [productSearchTerm, setProductSearchTerm] = useState('');
 
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -116,8 +122,12 @@ export default function ResellerPortal() {
   const { data: payoutRequests = [], isLoading: payoutsLoading } = usePayoutRequests(reseller?.id);
   const { data: products = [], isLoading: productsLoading } = useResellerProducts();
   const { data: codStats = { pendingCollection: 0, totalCodOrders: 0, successRate: 100 } } = useResellerCODStats(reseller?.id);
+  const { data: notifications = [] } = useResellerNotifications(reseller?.id);
+  const markNotificationRead = useMarkNotificationRead();
   const createPayoutRequest = useCreatePayoutRequest();
   const placeOrder = usePlaceResellerOrder();
+  
+  const unreadNotificationsCount = notifications.filter(n => !n.is_read).length;
 
   // Compute stats from real reseller data
   const resellerStats = {
@@ -148,6 +158,11 @@ export default function ResellerPortal() {
       severity: 'medium',
     });
   }
+
+  const filteredProducts = products.filter(p => 
+    p.name?.toLowerCase().includes(productSearchTerm.toLowerCase()) || 
+    p.sku?.toLowerCase().includes(productSearchTerm.toLowerCase())
+  );
 
   // Redirect if not authenticated or not an approved reseller
   useEffect(() => {
@@ -344,9 +359,79 @@ export default function ResellerPortal() {
             {navItems.find(n => n.id === activeTab)?.label}
           </h1>
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <h3 className="font-semibold">Notifications</h3>
+                  {unreadNotificationsCount > 0 && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto px-2 py-1 text-xs"
+                      onClick={() => markNotificationRead.mutate('all')}
+                      disabled={markNotificationRead.isPending}
+                    >
+                      Mark all as read
+                    </Button>
+                  )}
+                </div>
+                <div className="max-h-[400px] overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-muted-foreground">
+                      No notifications yet
+                    </div>
+                  ) : (
+                    <div className="flex flex-col">
+                      {notifications.map((notification) => (
+                        <div
+                          key={notification.id}
+                          className={cn(
+                            'px-4 py-3 text-sm border-b border-border last:border-0 hover:bg-muted/50 cursor-pointer transition-colors',
+                            !notification.is_read && 'bg-primary/5'
+                          )}
+                          onClick={() => {
+                            if (!notification.is_read) {
+                              markNotificationRead.mutate(notification.id);
+                            }
+                          }}
+                        >
+                          <div className="flex gap-3">
+                            <div className="mt-0.5">
+                              {notification.type === 'success' && <CheckCircle className="h-4 w-4 text-success" />}
+                              {notification.type === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+                              {notification.type === 'warning' && <AlertTriangle className="h-4 w-4 text-warning" />}
+                              {notification.type === 'info' && <Bell className="h-4 w-4 text-primary" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={cn('font-medium mb-0.5', !notification.is_read ? 'text-foreground' : 'text-muted-foreground')}>
+                                {notification.title}
+                              </p>
+                              <p className="text-muted-foreground text-xs leading-relaxed">
+                                {notification.message}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground mt-2">
+                                {new Date(notification.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
             </Button>
@@ -553,7 +638,12 @@ export default function ResellerPortal() {
                       <div className="flex gap-2 mt-2">
                         <div className="relative flex-1">
                           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                          <Input placeholder="Search products..." className="pl-9" />
+                          <Input 
+                            placeholder="Search products by name or SKU..." 
+                            className="pl-9" 
+                            value={productSearchTerm}
+                            onChange={(e) => setProductSearchTerm(e.target.value)}
+                          />
                         </div>
                         <Button variant="outline">
                           <Filter className="h-4 w-4 mr-2" />
@@ -567,12 +657,12 @@ export default function ResellerPortal() {
                           <div className="col-span-2 flex items-center justify-center py-8">
                             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                           </div>
-                        ) : products.length === 0 ? (
+                        ) : filteredProducts.length === 0 ? (
                           <div className="col-span-2 text-center py-8 text-muted-foreground">
-                            No products available
+                            {products.length === 0 ? 'No products available' : 'No matching products found'}
                           </div>
                         ) : (
-                          products.slice(0, 6).map((product) => {
+                          filteredProducts.map((product) => {
                             const selected = selectedProducts.find(p => p.productId === product.id);
                             const resellerPrice = product.reseller_price || Math.round(product.selling_price * 0.85);
                             return (
