@@ -359,15 +359,15 @@ export function useUpdateShipmentStatus() {
         .eq('id', payload.id)
         .single();
 
+      let orderStatus = '';
       if (shipment) {
         // 1. Sync the status back to the order
-        let orderStatus = '';
         if (payload.status === 'in_transit') orderStatus = 'shipped';
         else if (payload.status === 'out_for_delivery') orderStatus = 'out_for_delivery';
         else if (payload.status === 'delivered') orderStatus = 'delivered';
         else if (payload.status === 'returned') orderStatus = 'returned';
         else if (payload.status === 'cancelled') orderStatus = 'cancelled';
-        
+
         if (orderStatus) {
           await supabase
             .from('orders')
@@ -394,12 +394,12 @@ export function useUpdateShipmentStatus() {
               notes: 'Automatically generated upon successful delivery'
             });
           } else {
-             // Mark existing pending payment as collected
-             await supabase
-               .from('payments')
-               .update({ status: 'collected' })
-               .eq('id', existingPayment.id)
-               .eq('status', 'pending');
+            // Mark existing pending payment as collected
+            await supabase
+              .from('payments')
+              .update({ status: 'collected' })
+              .eq('id', existingPayment.id)
+              .eq('status', 'pending');
           }
         } else if (payload.status === 'returned' || payload.status === 'cancelled') {
           // Reject any pending payments

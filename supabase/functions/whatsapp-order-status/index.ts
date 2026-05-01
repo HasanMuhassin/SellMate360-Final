@@ -68,6 +68,26 @@ Rules:
   return text.trim();
 }
 
+// ─── Fallback: pre-written messages when AI is unavailable ────────────────────
+// Used when Gemini fails due to quota, rate-limit, or network errors.
+// The customer still receives a clear, polite status update.
+function getFallbackMessage(orderNumber: string, newStatus: string): string {
+  const statusMessages: Record<string, string> = {
+    confirmed:        `Dear Customer, great news! 🎉 Your order #${orderNumber} has been confirmed. We'll begin preparing it shortly. Thank you for shopping with SellMate!`,
+    processing:       `Dear Customer, your order #${orderNumber} is now being processed and packed. 📦 We'll notify you once it's on its way!`,
+    shipped:          `Dear Customer, your order #${orderNumber} is on its way! 🚚 Our courier will deliver it to you soon. Thank you for your patience!`,
+    out_for_delivery: `Dear Customer, exciting news! 🏃 Your order #${orderNumber} is out for delivery and will arrive today. Please be available to receive it!`,
+    delivered:        `Dear Customer, your order #${orderNumber} has been delivered! ✅ We hope you love it. Visit https://sellmate.lk to shop again!`,
+    cancelled:        `Dear Customer, your order #${orderNumber} has been cancelled. If you have any questions, please contact us at +94778469248. We're happy to help!`,
+    returned:         `Dear Customer, your order #${orderNumber} has been returned. Please contact our admin at +94778469248 for assistance. Thank you!`,
+  };
+
+  return (
+    statusMessages[newStatus] ??
+    `Dear Customer, your order #${orderNumber} status has been updated to: ${newStatus}. Contact us at +94778469248 for more info.`
+  );
+}
+
 // ─── WhatsApp: Send a text message ────────────────────────────────────────────
 async function sendWhatsAppMessage(
   to: string,
@@ -178,7 +198,16 @@ serve(async (req: Request) => {
       ? "Customer"
       : rawName.split(" ")[0];
 
-    const message   = await generateStatusMessage(firstName, order.order_number, newStatus, order.total ?? 0);
+    // ── Step 2: Generate AI message (with fallback if Gemini is unavailable) ───
+    let message: string;
+    try {
+      message = await generateStatusMessage(firstName, order.order_number, newStatus, order.total ?? 0);
+      console.log(`[ORDER-STATUS] AI message generated (${message.length} chars)`);
+    } catch (aiErr: any) {
+      const aiErrMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+      console.warn("[ORDER-STATUS] Gemini failed, using fallback message. Reason:", aiErrMsg);
+      message = getFallbackMessage(order.order_number, newStatus);
+    }
     console.log(`[ORDER-STATUS] Message: "${message.slice(0, 80)}..."`);
 
     // ── Step 3: Send WhatsApp message ─────────────────────────────────────────

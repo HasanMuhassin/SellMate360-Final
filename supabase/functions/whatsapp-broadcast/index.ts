@@ -44,9 +44,11 @@ async function generateFlashSaleMessage(sale: FlashSale): Promise<string> {
 
   console.log("[GEMINI] Calling generateText for sale:", sale.name);
 
-  const { text } = await generateText({
-    model: google("gemini-2.5-flash"),  // same model as whatsapp-processor (verified working)
-    system: `You are a WhatsApp marketing copywriter for SellMate, a Sri Lankan e-commerce store.
+  let text: string;
+  try {
+    const result = await generateText({
+      model: google("gemini-2.5-flash"),
+      system: `You are a WhatsApp marketing copywriter for SellMate, a Sri Lankan e-commerce store.
 Write a concise, exciting flash sale announcement for WhatsApp.
 
 Rules:
@@ -56,16 +58,22 @@ Rules:
 - Mention the discount, sale name, and end time clearly
 - Last sentence must be a call to action directing them to visit https://sellmate.lk to grab the deal now
 - Sound human and excited, not robotic or template-like`,
-    prompt: `Generate a WhatsApp flash sale message for:
+      prompt: `Generate a WhatsApp flash sale message for:
 Sale Name: ${sale.name}
 Discount: ${discountLabel}
 Description: ${sale.description || "Limited time offer on selected products"}
 Starts: ${startsAt}
 Ends: ${endsAt}`,
-  });
+    });
+    text = result.text.trim();
+    console.log("[GEMINI] Response received, length:", text.length);
+  } catch (aiErr: any) {
+    const reason = aiErr instanceof Error ? aiErr.message : String(aiErr);
+    console.warn("[GEMINI] Failed, using fallback message. Reason:", reason);
+    text = `Hey SellMate family! 🎉 We have an exciting flash sale running right now! ${sale.name} — ${discountLabel} off! This offer ends on ${endsAt}, so don’t miss out. Visit https://sellmate.lk to grab the deal now! 🛒`;
+  }
 
-  console.log("[GEMINI] Response received, length:", text.length);
-  return text.trim();
+  return text;
 }
 
 // ─── WhatsApp: Send a text message ────────────────────────────────────────────

@@ -51,9 +51,11 @@ Description: ${product.description || "A great new addition to our catalogue"}`;
 
   console.log("[GEMINI] Calling generateText for product:", product.name);
 
-  const { text } = await generateText({
-    model: google("gemini-2.5-flash"),
-    system: `You are a WhatsApp marketing copywriter for SellMate, a Sri Lankan e-commerce store.
+  let text: string;
+  try {
+    const result = await generateText({
+      model: google("gemini-2.5-flash"),
+      system: `You are a WhatsApp marketing copywriter for SellMate, a Sri Lankan e-commerce store.
 Write a concise, exciting new product announcement for WhatsApp customers.
 
 Rules:
@@ -64,11 +66,18 @@ Rules:
 - Make it sound exciting, like something they'd want to check out immediately
 - Last sentence must be a call to action directing them to visit https://sellmate.lk to order
 - Sound human and enthusiastic, not like a template`,
-    prompt,
-  });
+      prompt,
+    });
+    text = result.text.trim();
+    console.log("[GEMINI] Response received, length:", text.length);
+  } catch (aiErr: any) {
+    const reason = aiErr instanceof Error ? aiErr.message : String(aiErr);
+    console.warn("[GEMINI] Failed, using fallback message. Reason:", reason);
+    const priceLabel = `Rs. ${product.selling_price.toLocaleString()}`;
+    text = `Hey SellMate family! 🎉 We just launched something new! Introducing our ${product.name}, now available for just ${priceLabel}. Limited stock — don't miss out! Visit https://sellmate.lk to order yours now. 🛒`;
+  }
 
-  console.log("[GEMINI] Response received, length:", text.length);
-  return text.trim();
+  return text;
 }
 
 // ─── WhatsApp: Send a text message ────────────────────────────────────────────

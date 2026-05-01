@@ -54,30 +54,20 @@ export async function detectIntent(
 ): Promise<IntentResult> {
   try {
     const { object } = await generateObject({
-      model: google("gemini-2.5-flash"),   // Fast model for low-latency classification
+      model: google("gemini-2.5-flash"),
       schema: IntentSchema,
       system: INTENT_SYSTEM_PROMPT,
       prompt: `Conversation so far:\n${conversationHistory}\n\nLatest message: ${customerMessage}`,
     });
     return object;
   } catch (err) {
-    // Log the full error so it appears clearly in Supabase Edge Function logs
+    // Log full error so it appears clearly in Supabase Edge Function logs
     const message = err instanceof Error ? err.message : String(err);
-    console.error("Intent detection error:", message);
-    console.error("Full error:", JSON.stringify(err, Object.getOwnPropertyNames(err)));
-    // Safe fallback — routes to the graceful UNKNOWN handler
-    return {
-      intent: "UNKNOWN",
-      isQuery: false,
-      isOrderPlacement: false,
-      isOrderConfirmed: false,
-      productName: null,
-      quantity: null,
-      location: null,
-      paymentMethod: null,
-      confidence: 0,
-      missingFields: [],
-    };
+    console.error("[GEMINI] detectIntent failed:", message);
+    // Re-throw so the outer handler in index.ts can send a proper
+    // "technical issue" message to the customer instead of silently
+    // routing every message to the UNKNOWN/welcome fallback.
+    throw err;
   }
 }
 
@@ -118,7 +108,11 @@ export async function generateFallbackResponse(
       prompt: customerMessage,
     });
     return text.trim();
-  } catch {
-    return "Hi! 👋 Welcome to SellMate. You can ask me about our products or place an order anytime.";
+  } catch (err) {
+    // Re-throw so the outer handler sends a proper "technical issue" message.
+    // Returning a hardcoded welcome string here was misleading when the AI
+    // was fully down (every message returned the same greeting).
+    console.error("[GEMINI] generateFallbackResponse failed:", err instanceof Error ? err.message : String(err));
+    throw err;
   }
 }
