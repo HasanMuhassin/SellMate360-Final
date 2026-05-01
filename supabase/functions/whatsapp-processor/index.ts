@@ -119,10 +119,17 @@ serve(async (req: Request) => {
     console.log(`[${phone}] Intent: ${intent.intent} (${intent.confidence}) | ProductName: ${intent.productName ?? "none"}`);
 
     // ── CONTEXTUAL STEP OVERRIDES ─────────────────────────────────────────────
-    // Mid-order text inputs that look CASUAL but are actually field answers
+    // These run BEFORE intent routing. Mid-order messages must be interpreted
+    // by their context (what step we're on), not by what the AI classified them.
+    //
+    // BUG FIXED: collecting_qty now intercepts ANY intent, not just CASUAL.
+    // When the user types "3", the AI often classifies it as ORDER with the
+    // product name from history — which then wrongly triggered the
+    // "different product" reset. We now check step first, AI intent second.
 
-    if (state.current_step === "collecting_qty" && intent.intent === "CASUAL" && /\d+/.test(messageText)) {
+    if (state.current_step === "collecting_qty" && /\d+/.test(messageText)) {
       const qty = parseInt(messageText.match(/\d+/)![0], 10);
+      console.log(`[${phone}] collecting_qty override — qty: ${qty}`);
       await handleOrderDraft(db, phone, { ...intent, intent: "ORDER", quantity: qty }, state);
       return new Response("ok", { status: 200 });
     }
@@ -150,15 +157,25 @@ serve(async (req: Request) => {
         await handleQuery(db, phone, intent.productName, messageText);
         break;
 
-      case "ORDER":
-        // FIX: If user starts ordering a product different from the one already
-        // in their draft, reset the draft so we start fresh with the new product.
-        if (
+      case "ORDER": {
+        // Only reset the draft if the user is at idle AND explicitly ordering
+        // a clearly different product. Never reset mid-order — the AI frequently
+        // echoes the product name from history even for qty/location messages.
+        //
+        // BUG FIXED: old check split by first word ('digital') and compared
+        // against 'air fryer' — they didn't match, so it wrongly reset.
+        // New check: bidirectional substring match, only from idle step.
+        const draftName  = (state.draft_product_name ?? "").toLowerCase();
+        const intentName = (intent.productName ?? "").toLowerCase();
+        const isDifferentProduct =
+          state.current_step === "idle" &&   // never reset mid-order
           intent.productName &&
           state.draft_product_name &&
-          !intent.productName.toLowerCase().includes(state.draft_product_name.toLowerCase().split(" ")[0])
-        ) {
-          console.log(`[${phone}] New ORDER for different product — resetting draft.`);
+          !draftName.includes(intentName) &&  // "digital air fryer 5l" includes "air fryer" ✓
+          !intentName.includes(draftName);    // also check reverse
+
+        if (isDifferentProduct) {
+          console.log(`[${phone}] New ORDER for different product ("${intentName}" vs "${draftName}") — resetting draft.`);
           await resetState(db, phone);
           const freshState = await getState(db, phone);
           await handleOrderDraft(db, phone, intent, freshState);
@@ -166,6 +183,7 @@ serve(async (req: Request) => {
           await handleOrderDraft(db, phone, intent, state);
         }
         break;
+      }
 
       case "CASUAL":
       case "UNKNOWN":

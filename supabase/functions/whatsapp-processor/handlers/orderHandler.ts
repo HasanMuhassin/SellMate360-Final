@@ -214,7 +214,10 @@ export async function handleCancel(db: SupabaseClient, phone: string): Promise<v
   await resetState(db, phone);
   await sendText(
     phone,
-    "No problem! Your order has been cancelled. 😊 Feel free to browse our products or start a new order anytime."
+    "Your order draft has been cancelled. 😊\n\n" +
+    "If you placed an order and need to cancel it, please contact our admin directly:\n" +
+    "📞 *+94778469248*\n\n" +
+    "Feel free to browse our products or start a new order anytime!"
   );
 }
 

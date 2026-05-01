@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+const STATUS_NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-order-status`;
+
 // Types matching the actual DB schema
 export interface DbOrder {
   id: string;
@@ -184,10 +186,26 @@ export function useUpdateOrderStatus() {
 
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       queryClient.invalidateQueries({ queryKey: ['admin-order', data.id] });
       toast.success(`Order status updated to ${data.order_status}`);
+
+      // Fire-and-forget: notify customer via WhatsApp about their order status change.
+      // We do NOT await — admin UI is never delayed by this.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        fetch(STATUS_NOTIFY_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+          },
+          body: JSON.stringify({ orderId: data.id, newStatus: data.order_status }),
+        }).catch((err) => console.warn('[WA Status] Failed to trigger order-status notify:', err));
+      } catch (err) {
+        console.warn('[WA Status] Could not get session for order-status notify:', err);
+      }
     },
     onError: (error) => {
       toast.error('Failed to update order status: ' + error.message);

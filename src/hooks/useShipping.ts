@@ -2,6 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 
+const STATUS_NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-order-status`;
+
 // ==================== Types ====================
 export interface ShipmentListItem {
   id: string;
@@ -298,13 +300,28 @@ export function useCreateShipment() {
         .update({ order_status: 'shipped' })
         .eq('id', payload.order_id);
 
-      return { shipment, trackingNumber };
+      return { shipment, trackingNumber, orderId: payload.order_id };
     },
-    onSuccess: () => {
+    onSuccess: async (data) => {
       qc.invalidateQueries({ queryKey: ['shipments'] });
       qc.invalidateQueries({ queryKey: ['shippable-orders'] });
       qc.invalidateQueries({ queryKey: ['admin-orders'] });
       toast.success('Shipment created successfully');
+
+      // Fire-and-forget: notify customer that their order has been shipped.
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        fetch(STATUS_NOTIFY_URL, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token ?? ''}`,
+          },
+          body: JSON.stringify({ orderId: data.orderId, newStatus: 'shipped' }),
+        }).catch((err) => console.warn('[WA Status] Failed to trigger shipped notify:', err));
+      } catch (err) {
+        console.warn('[WA Status] Could not get session for shipped notify:', err);
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });
@@ -393,12 +410,32 @@ export function useUpdateShipmentStatus() {
             .eq('status', 'pending');
         }
       }
+
+      // Return orderId + orderStatus so onSuccess can fire the WA notification
+      return { orderId: shipment?.order_id ?? null, orderStatus };
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: async (data, vars) => {
       qc.invalidateQueries({ queryKey: ['shipments'] });
       qc.invalidateQueries({ queryKey: ['shipment', vars.id] });
       qc.invalidateQueries({ queryKey: ['admin-orders'] });
       toast.success('Shipment status updated');
+
+      // Fire-and-forget: notify customer about the new order status.
+      if (data?.orderId && data?.orderStatus) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          fetch(STATUS_NOTIFY_URL, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token ?? ''}`,
+            },
+            body: JSON.stringify({ orderId: data.orderId, newStatus: data.orderStatus }),
+          }).catch((err) => console.warn('[WA Status] Failed to trigger shipment-status notify:', err));
+        } catch (err) {
+          console.warn('[WA Status] Could not get session for shipment-status notify:', err);
+        }
+      }
     },
     onError: (err: Error) => toast.error(err.message),
   });
